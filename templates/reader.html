@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.chapter.Title}} - {{.novel.Title}}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.13.5"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="bg-white shadow-sm border-b px-6 py-3 flex items-center justify-between">
+    <a href="/" class="text-xl font-bold text-indigo-600">NovelForge</a>
+    <div class="flex items-center gap-4">
+      <a href="/" class="text-sm text-gray-600 hover:text-indigo-600">书架</a>
+      <a href="/novel/{{.novel.ID}}" class="text-sm text-gray-600 hover:text-indigo-600">{{.novel.Title}}</a>
+      <a href="/logout" class="text-sm text-gray-400 hover:text-red-500">退出</a>
+    </div>
+  </nav>
+
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        {{if .prevNo}}<a href="/novel/{{.novel.ID}}/chapter/{{.prevNo}}" class="text-indigo-600 hover:underline text-sm">← 上一章</a>{{else}}<span class="text-gray-300 text-sm">← 上一章</span>{{end}}
+        <span class="mx-3 text-lg font-semibold">第{{.chapter.ChapterNo}}章：{{.chapter.Title}}</span>
+        {{if .nextNo}}<a href="/novel/{{.novel.ID}}/chapter/{{.nextNo}}" class="text-indigo-600 hover:underline text-sm">下一章 →</a>{{else}}<span class="text-gray-300 text-sm">下一章 →</span>{{end}}
+      </div>
+      <div class="text-xs text-gray-400">状态：{{.chapter.Status}}</div>
+    </div>
+
+    <div class="flex gap-6">
+      <div class="flex-1 bg-white rounded-lg shadow-sm p-6">
+        <div class="prose max-w-none text-gray-800 leading-relaxed whitespace-pre-wrap">{{.chapter.Content}}</div>
+      </div>
+
+      <div class="w-80 shrink-0">
+        {{if .pages}}
+        {{range .pages}}
+        <div class="bg-white rounded-lg shadow-sm p-2 mb-3">
+          <p class="text-xs text-gray-500 mb-1">{{.PanelCount}}格漫画</p>
+          {{range $i, $url := .ImageURLs}}
+          {{if $url}}
+          <img src="/images/{{$url}}" class="w-full rounded border mb-1" alt="漫画格" loading="lazy">
+          {{end}}
+          {{end}}
+        </div>
+        {{end}}
+        {{else}}
+        <div class="bg-white rounded-lg shadow-sm p-6 text-center text-gray-400 text-sm">
+          漫画生成中...
+        </div>
+        {{end}}
+      </div>
+    </div>
+  </main>
+</body>
+</html>
