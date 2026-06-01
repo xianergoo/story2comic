@@ -3,7 +3,7 @@ novelforge
 *.exe
 
 # 运行时数据
-data/novelforge.db
+data/novelforge.db*
 data/images/*.png
 data/images/**/*.png
 
