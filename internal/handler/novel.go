@@ -31,11 +31,20 @@ func (h *NovelHandler) Create(c *gin.Context) {
 	imageMode := c.PostForm("image_mode")
 	summary := c.PostForm("summary")
 	aiConfigID, _ := strconv.Atoi(c.PostForm("ai_config_id"))
+	if aiConfigID == 0 {
+		var defaultCfg model.AIConfig
+		err := h.db.Where("user_id = ? AND is_default = ?", userID, true).First(&defaultCfg).Error
+		if err != nil {
+			h.db.Where("user_id = ?", userID).First(&defaultCfg)
+		}
+		aiConfigID = int(defaultCfg.ID)
+	}
 	novel, err := h.svc.Create(userID, title, summary, mode, imageMode, uint(aiConfigID))
 	if err != nil {
 		c.String(http.StatusInternalServerError, err.Error())
 		return
 	}
+	go h.svc.StartGeneration(novel.ID)
 	c.Redirect(http.StatusFound, "/novel/"+strconv.Itoa(int(novel.ID)))
 }
 
