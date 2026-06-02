@@ -1,10 +1,12 @@
 package ai
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -74,6 +76,75 @@ func (p *OpenAIProvider) Chat(req ChatRequest) (*ChatResponse, error) {
 		return nil, fmt.Errorf("no choices in response")
 	}
 	return &ChatResponse{Content: result.Choices[0].Message.Content}, nil
+}
+
+func (p *OpenAIProvider) ChatStream(req ChatRequest) (<-chan StreamChunk, error) {
+	if req.Model == "" {
+		req.Model = p.textModel
+	}
+	body := map[string]any{
+		"model":    req.Model,
+		"messages": req.Messages,
+		"stream":   true,
+	}
+	b, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	httpReq, err := http.NewRequest("POST", p.baseURL+"/chat/completions", bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("stream request failed: %s", resp.Status)
+	}
+
+	ch := make(chan StreamChunk, 50)
+	go func() {
+		defer resp.Body.Close()
+		defer close(ch)
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			data := strings.TrimPrefix(line, "data: ")
+			if data == "[DONE]" {
+				ch <- StreamChunk{Done: true}
+				return
+			}
+			var chunk struct {
+				Choices []struct {
+					Delta struct {
+						Content string `json:"content"`
+					} `json:"delta"`
+					FinishReason string `json:"finish_reason"`
+				} `json:"choices"`
+			}
+			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+				continue
+			}
+			if len(chunk.Choices) > 0 {
+				delta := chunk.Choices[0].Delta.Content
+				done := chunk.Choices[0].FinishReason == "stop"
+				ch <- StreamChunk{Content: delta, Done: done}
+				if done {
+					return
+				}
+			}
+		}
+	}()
+	return ch, nil
 }
 
 func (p *OpenAIProvider) GenerateImage(req ImageRequest) (*ImageResponse, error) {

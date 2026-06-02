@@ -108,7 +108,9 @@ func (s *NovelService) StartGeneration(novelID uint) error {
 	}
 
 	s.push(novelID, "outline", "正在生成故事大纲...")
-	outline, err := s.outlineSvc.Generate(novel, outlineInput)
+	outline, err := s.outlineSvc.GenerateStream(novel, outlineInput, func(chunk string, done bool) {
+		s.onProgress(novelID, "stream", fmt.Sprintf(`{"stage":"outline","content":%q,"done":%v}`, chunk, done))
+	})
 	if err != nil {
 		fmt.Printf("GEN-ERR: outline failed: %v\n", err)
 		s.push(novelID, "error", "大纲生成失败: "+err.Error())

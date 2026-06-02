@@ -25,8 +25,15 @@ type ImageResponse struct {
 	URLs []string `json:"urls"`
 }
 
+type StreamChunk struct {
+	Content string
+	Done    bool
+	Error   string
+}
+
 type Provider interface {
 	Chat(req ChatRequest) (*ChatResponse, error)
+	ChatStream(req ChatRequest) (<-chan StreamChunk, error)
 	GenerateImage(req ImageRequest) (*ImageResponse, error)
 }
 

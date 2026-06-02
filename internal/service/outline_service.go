@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"novelforge/internal/ai"
 	"novelforge/internal/model"
 
@@ -47,6 +48,10 @@ type ChapterPlanItem struct {
 }
 
 func (s *OutlineService) Generate(novel *model.Novel, userInput string) (*model.Outline, error) {
+	return s.GenerateStream(novel, userInput, func(chunk string, done bool) {})
+}
+
+func (s *OutlineService) GenerateStream(novel *model.Novel, userInput string, onChunk func(chunk string, done bool)) (*model.Outline, error) {
 	systemPrompt := `你是一个专业的小说策划，请根据用户输入生成完整的故事大纲。
 
 输出纯 JSON 格式（不要 markdown 包裹）：
@@ -59,7 +64,8 @@ func (s *OutlineService) Generate(novel *model.Novel, userInput string) (*model.
 请生成 8-12 章的章节规划。`
 
 	userPrompt := fmt.Sprintf("用户输入：%s", userInput)
-	resp, err := s.provider.Chat(ai.ChatRequest{
+
+	ch, err := s.provider.ChatStream(ai.ChatRequest{
 		Messages: []ai.ChatMessage{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
@@ -69,14 +75,24 @@ func (s *OutlineService) Generate(novel *model.Novel, userInput string) (*model.
 		return nil, err
 	}
 
+	var full strings.Builder
+	for chunk := range ch {
+		if chunk.Error != "" {
+			return nil, fmt.Errorf("stream error: %s", chunk.Error)
+		}
+		full.WriteString(chunk.Content)
+		onChunk(chunk.Content, chunk.Done)
+	}
+	return s.parseAndSave(novel, full.String())
+}
+
+func (s *OutlineService) parseAndSave(novel *model.Novel, raw string) (*model.Outline, error) {
 	var result OutlineResult
-	if err := json.Unmarshal([]byte(resp.Content), &result); err != nil {
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		return nil, fmt.Errorf("failed to parse outline JSON: %w", err)
 	}
-
 	csJSON, _ := json.Marshal(result.CharacterSheets)
 	cpJSON, _ := json.Marshal(result.ChapterPlan)
-
 	outline := &model.Outline{
 		NovelID:         novel.ID,
 		Content:         result.Content,

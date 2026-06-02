@@ -9,7 +9,7 @@
   <script src="https://unpkg.com/htmx-ext-sse@2.2.1/sse.js"></script>
   <script defer src="https://unpkg.com/alpinejs@3.13.5"></script>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="bg-gray-50 min-h-screen" x-data="{streamMode: true}">
   <nav class="bg-white shadow-sm border-b px-6 py-3 flex items-center justify-between">
     <div class="flex items-center gap-4">
       <a href="/" class="text-sm text-gray-400 hover:text-indigo-600">← 返回书架</a>
@@ -19,59 +19,59 @@
   </nav>
 
   <main class="max-w-6xl mx-auto px-4 py-6">
-    <!-- 调试面板 -->
-    <div class="bg-gray-900 text-green-400 font-mono text-xs rounded-lg p-3 mb-3 max-h-40 overflow-y-auto"
-         hx-ext="sse"
-         sse-connect="/api/sse?novel_id={{.novel.ID}}"
-         id="debug-log"></div>
+    <!-- 控制栏 -->
+    <div class="flex flex-wrap items-center gap-2 mb-3 text-xs">
+      <span class="font-semibold text-gray-700">{{.novel.Title}}</span>
+      <span class="text-gray-400">| {{.novel.Mode}}</span>
 
-    <!-- 状态条 -->
-    <div class="flex flex-wrap items-center gap-2 mb-4">
-      <span class="text-sm font-semibold text-gray-700">{{.novel.Title}}</span>
-      <span class="text-xs text-gray-400">| {{.novel.Mode}}</span>
+      <!-- 流式/完整切换 -->
+      <label class="ml-3 flex items-center gap-1 cursor-pointer">
+        <input type="checkbox" x-model="streamMode" class="rounded">
+        <span class="text-gray-500">流式输出</span>
+      </label>
 
       <!-- 文字管线 -->
-      <span class="ml-3 text-xs px-2 py-0.5 rounded-full
-        {{if eq .novel.TextStatus "writing"}}bg-blue-100 text-blue-700
-        {{else if eq .novel.TextStatus "done"}}bg-green-100 text-green-700
-        {{else if eq .novel.TextStatus "paused"}}bg-amber-100 text-amber-700
-        {{else}}bg-gray-100 text-gray-500{{end}}">
-        文字: {{.novel.TextStatus}}
+      <span class="ml-2 px-2 py-0.5 rounded-full {{if eq .novel.TextStatus "writing"}}bg-blue-100 text-blue-700{{else if eq .novel.TextStatus "done"}}bg-green-100 text-green-700{{else if eq .novel.TextStatus "paused"}}bg-amber-100 text-amber-700{{else}}bg-gray-100 text-gray-500{{end}}">
+        文字: {{.novel.TextStatus}} ({{.textDone}}/{{len .chapters}}章)
       </span>
-      <span class="text-xs text-gray-400">{{.textDone}}/{{len .chapters}}章</span>
       {{if eq .novel.TextStatus "writing"}}
-      <form method="POST" action="/novel/{{.novel.ID}}/stop?pipeline=text" class="inline">
-        <button class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded hover:bg-red-200">⏹ 文字</button>
-      </form>
+      <form method="POST" action="/novel/{{.novel.ID}}/stop?pipeline=text" class="inline"><button class="bg-red-100 text-red-600 px-2 py-0.5 rounded hover:bg-red-200">⏹</button></form>
       {{end}}
       {{if or (eq .novel.TextStatus "paused") (eq .novel.TextStatus "idle")}}
-      <form method="POST" action="/novel/{{.novel.ID}}/resume?pipeline=text" class="inline">
-        <button class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded hover:bg-green-200">▶ 文字</button>
-      </form>
+      <form method="POST" action="/novel/{{.novel.ID}}/resume?pipeline=text" class="inline"><button class="bg-green-100 text-green-600 px-2 py-0.5 rounded hover:bg-green-200">▶</button></form>
       {{end}}
 
       <!-- 漫画管线 -->
-      <span class="ml-3 text-xs px-2 py-0.5 rounded-full
-        {{if eq .novel.ImageStatus "generating"}}bg-purple-100 text-purple-700
-        {{else if eq .novel.ImageStatus "done"}}bg-green-100 text-green-700
-        {{else if eq .novel.ImageStatus "paused"}}bg-amber-100 text-amber-700
-        {{else}}bg-gray-100 text-gray-500{{end}}">
-        漫画: {{.novel.ImageStatus}}
+      <span class="ml-2 px-2 py-0.5 rounded-full {{if eq .novel.ImageStatus "generating"}}bg-purple-100 text-purple-700{{else if eq .novel.ImageStatus "done"}}bg-green-100 text-green-700{{else if eq .novel.ImageStatus "paused"}}bg-amber-100 text-amber-700{{else}}bg-gray-100 text-gray-500{{end}}">
+        漫画: {{.novel.ImageStatus}} ({{.comicDone}}页)
       </span>
-      <span class="text-xs text-gray-400">{{.comicDone}}页</span>
       {{if eq .novel.ImageStatus "generating"}}
-      <form method="POST" action="/novel/{{.novel.ID}}/stop?pipeline=image" class="inline">
-        <button class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded hover:bg-red-200">⏹ 漫画</button>
-      </form>
+      <form method="POST" action="/novel/{{.novel.ID}}/stop?pipeline=image" class="inline"><button class="bg-red-100 text-red-600 px-2 py-0.5 rounded hover:bg-red-200">⏹</button></form>
       {{end}}
       {{if or (eq .novel.ImageStatus "paused") (eq .novel.ImageStatus "idle")}}
-      <form method="POST" action="/novel/{{.novel.ID}}/resume?pipeline=image" class="inline">
-        <button class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded hover:bg-purple-200">▶ 漫画</button>
-      </form>
+      <form method="POST" action="/novel/{{.novel.ID}}/resume?pipeline=image" class="inline"><button class="bg-purple-100 text-purple-600 px-2 py-0.5 rounded hover:bg-purple-200">▶</button></form>
       {{end}}
 
-      <span class="text-xs text-gray-400">| {{.novel.UpdatedAt.Format "15:04:05"}}</span>
+      <span class="text-gray-400 ml-auto">{{.novel.UpdatedAt.Format "15:04:05"}}</span>
     </div>
+
+    <!-- 流式内容面板 -->
+    <div x-show="streamMode" class="bg-gray-900 rounded-lg mb-4" style="min-height:120px">
+      <div class="px-3 py-2 text-xs text-gray-500 font-mono border-b border-gray-700 flex items-center justify-between">
+        <span id="stream-stage">等待中...</span>
+        <span id="stream-progress" class="text-gray-600"></span>
+      </div>
+      <div id="stream-content" class="p-3 text-green-400 font-mono text-xs max-h-60 overflow-y-auto whitespace-pre-wrap"></div>
+    </div>
+
+    <!-- 调试面板 -->
+    <details class="mb-4" x-show="!streamMode">
+      <summary class="text-xs text-gray-400 cursor-pointer">调试日志</summary>
+      <div class="bg-gray-900 text-green-400 font-mono text-xs rounded p-3 mt-1 max-h-40 overflow-y-auto"
+           hx-ext="sse"
+           sse-connect="/api/sse?novel_id={{.novel.ID}}"
+           id="debug-log"></div>
+    </details>
 
     <!-- 大纲 -->
     {{if .outline.Content}}
@@ -81,7 +81,7 @@
     </details>
     {{end}}
 
-    <!-- 章节列表 -->
+    <!-- 章节 -->
     <h2 class="font-semibold mb-3">章节列表</h2>
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {{range .chapters}}
@@ -94,25 +94,77 @@
     </div>
   </main>
 
+  <!-- SSE 连接 -->
+  <div hx-ext="sse" sse-connect="/api/sse?novel_id={{.novel.ID}}" style="display:none"></div>
+
   <script>
-    const log = document.getElementById('debug-log');
-    function appendLog(msg, color) {
+    let streamBuffer = '';
+    let currentStage = '';
+
+    function appendLog(el, msg, color) {
       const line = document.createElement('div');
       line.style.color = color || '#4ade80';
       line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
-      log.appendChild(line);
-      log.scrollTop = log.scrollHeight;
+      el.appendChild(line);
+      el.scrollTop = el.scrollHeight;
     }
+
     document.addEventListener('htmx:sseMessage', function(e) {
       try {
-        var d = JSON.parse(e.detail.data);
-        if (d.type === 'progress') appendLog(d.step + ': ' + d.detail, '#60a5fa');
-        else if (d.type === 'chapter') { appendLog('第'+d.chapter_no+'章: '+d.status, '#4ade80'); setTimeout(function(){location.reload()},2000); }
-        else if (d.type === 'comic') appendLog('第'+d.chapter_no+'章漫画完成', '#a78bfa');
-        else if (d.type === 'error') appendLog('ERROR: '+d.msg, '#f87171');
-      } catch(err) { appendLog(e.detail.data, '#94a3b8'); }
+        var data = JSON.parse(e.detail.data);
+        var logEl = document.getElementById('debug-log');
+        var streamEl = document.getElementById('stream-content');
+        var stageEl = document.getElementById('stream-stage');
+        var progEl = document.getElementById('stream-progress');
+
+        // 流式内容
+        if (data.type === 'progress' && data.step === 'stream') {
+          try {
+            var inner = JSON.parse(data.detail);
+            if (inner.stage !== currentStage) {
+              currentStage = inner.stage;
+              streamBuffer = '';
+            }
+            streamBuffer += inner.content;
+            if (streamEl) streamEl.textContent = streamBuffer;
+            if (stageEl) stageEl.textContent = '阶段: ' + inner.stage + (inner.done ? ' [完成]' : ' [生成中...]');
+            if (inner.done) currentStage = '';
+          } catch(e) {}
+        }
+
+        // 进度信息
+        else if (data.type === 'progress' && data.step !== 'stream') {
+          if (logEl) appendLog(logEl, data.step + ': ' + data.detail, '#60a5fa');
+          if (stageEl) stageEl.textContent = data.step + ': ' + data.detail;
+        }
+
+        // 章节完成
+        else if (data.type === 'chapter') {
+          if (logEl) appendLog(logEl, '第'+data.chapter_no+'章: '+data.status, '#4ade80');
+          if (progEl) progEl.textContent = '第'+data.chapter_no+'章: '+data.status;
+          setTimeout(function(){location.reload()}, 3000);
+        }
+
+        // 漫画完成
+        else if (data.type === 'comic') {
+          if (logEl) appendLog(logEl, '第'+data.chapter_no+'章漫画: '+data.status, '#a78bfa');
+        }
+
+        // 错误
+        else if (data.type === 'error') {
+          if (logEl) appendLog(logEl, 'ERROR: '+data.msg, '#f87171');
+          if (streamEl) streamEl.textContent = 'ERROR: ' + data.msg;
+          if (stageEl) stageEl.textContent = '错误';
+        }
+      } catch(err) {
+        if (logEl) appendLog(logEl, e.detail.data, '#94a3b8');
+      }
     });
-    document.addEventListener('htmx:sseError', function(e) { appendLog('SSE连接失败', '#f87171'); });
+
+    document.addEventListener('htmx:sseError', function(e) {
+      var logEl = document.getElementById('debug-log');
+      if (logEl) appendLog(logEl, 'SSE连接失败', '#f87171');
+    });
   </script>
 </body>
 </html>
