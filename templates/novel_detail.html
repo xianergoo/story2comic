@@ -54,15 +54,20 @@
     document.addEventListener('htmx:sseMessage', function(e) {
       var data = JSON.parse(e.detail.data);
       var el = document.getElementById('progress-text');
-      if (el && data.type === 'chapter') {
-        el.innerText = '第' + data.chapter_no + '章已生成，正在绘制漫画...';
-      } else if (el && data.type === 'comic') {
-        el.innerText = '第' + data.chapter_no + '章漫画完成！';
-      }
-      // 页面自动刷新以展示新章节
+      if (!el) return;
       if (data.type === 'chapter') {
+        el.innerHTML = '<span class="text-indigo-600">第' + data.chapter_no + '章已生成（' + data.status + '），正在绘制漫画...</span>';
         setTimeout(function() { location.reload(); }, 2000);
+      } else if (data.type === 'comic') {
+        el.innerHTML = '<span class="text-green-600">第' + data.chapter_no + '章漫画完成！</span>';
+        setTimeout(function() { location.reload(); }, 2000);
+      } else if (data.type === 'error') {
+        el.innerHTML = '<span class="text-red-600">错误：' + data.msg + '</span>';
       }
+      console.log('SSE:', data);
+    });
+    document.addEventListener('htmx:sseError', function(e) {
+      console.error('SSE connection error', e);
     });
   </script>
 </body>

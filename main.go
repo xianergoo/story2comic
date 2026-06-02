@@ -58,9 +58,14 @@ func main() {
 			json.Unmarshal([]byte(outline.ChapterPlan), &plan)
 			chapter, err := chapterSvc.Write(t.NovelID, t.ChapterNo, plan, outline)
 			if err != nil {
+				fmt.Printf("ERROR write: novel=%d ch=%d err=%v\n", t.NovelID, t.ChapterNo, err)
+				sseH.Push(t.NovelID, fmt.Sprintf(`{"type":"error","chapter_no":%d,"msg":"写文失败: %s"}`,
+					t.ChapterNo, err.Error()))
 				return err
 			}
-			sseH.Push(t.NovelID, fmt.Sprintf(`{"type":"chapter","chapter_no":%d,"status":"done"}`, t.ChapterNo))
+			sseH.Push(t.NovelID, fmt.Sprintf(`{"type":"chapter","chapter_no":%d,"status":"%s"}`,
+				t.ChapterNo, chapter.Status))
+			fmt.Printf("CHAPTER: novel=%d ch=%d status=%s\n", t.NovelID, t.ChapterNo, chapter.Status)
 			if chapter.Status == "done" {
 				taskQ.EnqueueImage(task.Task{NovelID: t.NovelID, ChapterNo: t.ChapterNo, Type: task.TaskImage})
 			}
@@ -79,6 +84,11 @@ func main() {
 			err := comicSvc.Generate(chapter, novel, outline)
 			if err == nil {
 				sseH.Push(t.NovelID, fmt.Sprintf(`{"type":"comic","chapter_no":%d,"status":"done"}`, t.ChapterNo))
+				fmt.Printf("COMIC: novel=%d ch=%d done\n", t.NovelID, t.ChapterNo)
+			} else {
+				fmt.Printf("ERROR comic: novel=%d ch=%d err=%v\n", t.NovelID, t.ChapterNo, err)
+				sseH.Push(t.NovelID, fmt.Sprintf(`{"type":"error","chapter_no":%d,"msg":"生图失败: %s"}`,
+					t.ChapterNo, err.Error()))
 			}
 			return err
 		},
@@ -118,6 +128,7 @@ func main() {
 		auth.GET("/ai-config", aiConfigH.Page)
 		auth.POST("/ai-config", aiConfigH.Create)
 		auth.DELETE("/ai-config/:id", aiConfigH.Delete)
+		auth.PUT("/ai-config/:id", aiConfigH.Update)
 	}
 
 	r.Static("/images", cfg.ImageDir)

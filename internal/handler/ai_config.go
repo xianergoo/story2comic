@@ -54,3 +54,24 @@ func (h *AIConfigHandler) Delete(c *gin.Context) {
 	h.db.Where("id = ? AND user_id = ?", id, userID).Delete(&model.AIConfig{})
 	c.Redirect(http.StatusFound, "/ai-config")
 }
+
+func (h *AIConfigHandler) Update(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	userID := c.GetUint("user_id")
+
+	isDefault := c.PostForm("is_default") == "on"
+	if isDefault {
+		h.db.Model(&model.AIConfig{}).Where("user_id = ?", userID).Update("is_default", false)
+	}
+
+	h.db.Model(&model.AIConfig{}).Where("id = ? AND user_id = ?", id, userID).Updates(map[string]interface{}{
+		"name":        c.PostForm("name"),
+		"provider":    c.PostForm("provider"),
+		"api_key":     c.PostForm("api_key"),
+		"base_url":    c.PostForm("base_url"),
+		"text_model":  c.PostForm("text_model"),
+		"image_model": c.PostForm("image_model"),
+		"is_default":  isDefault,
+	})
+	c.Redirect(http.StatusFound, "/ai-config")
+}
