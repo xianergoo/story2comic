@@ -6,9 +6,10 @@
   <title>{{.novel.Title}} - NovelForge</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.1/sse.js"></script>
   <script defer src="https://unpkg.com/alpinejs@3.13.5"></script>
 </head>
-<body class="bg-gray-50 min-h-screen" hx-ext="sse" hx-sse="connect:/api/sse?novel_id={{.novel.ID}}">
+<body class="bg-gray-50 min-h-screen">
   <nav class="bg-white shadow-sm border-b px-6 py-3 flex items-center justify-between">
     <div class="flex items-center gap-4">
       <a href="/" class="text-sm text-gray-400 hover:text-indigo-600">← 返回书架</a>
@@ -18,13 +19,18 @@
   </nav>
 
   <main class="max-w-6xl mx-auto px-4 py-6">
-    <div class="flex items-center gap-4 mb-4">
-      <span class="text-sm text-gray-500">{{.novel.Summary}}</span>
+    <div class="flex items-center gap-3 mb-4">
+      <span class="text-sm text-gray-500 max-w-md truncate">{{.novel.Summary}}</span>
       <span class="text-xs px-2 py-0.5 rounded-full {{if eq .novel.Status "completed"}}bg-green-100 text-green-700{{else if eq .novel.Status "failed"}}bg-red-100 text-red-700{{else}}bg-indigo-100 text-indigo-700{{end}}">{{.novel.Status}}</span>
     </div>
 
-    {{if .chapters}}
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+    <div class="flex gap-2 mb-4"
+         hx-ext="sse"
+         sse-connect="/api/sse?novel_id={{.novel.ID}}"
+         sse-swap="progress"
+         hx-swap="none"></div>
+
+    <div id="chapter-list" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {{range .chapters}}
       <a href="/novel/{{$.novel.ID}}/chapter/{{.ChapterNo}}" class="bg-white rounded-lg shadow-sm border p-3 hover:shadow-md transition-shadow">
         <span class="text-xs text-gray-400">第{{.ChapterNo}}章</span>
@@ -33,23 +39,31 @@
       </a>
       {{end}}
     </div>
-    {{else}}
-    <div class="text-center py-10 text-gray-400">
-      <p>章节生成中，请稍候...</p>
-      <div hx-sse="swap:progress" class="mt-2 text-sm" hx-swap="innerHTML"></div>
-      <script>
-        document.body.addEventListener('htmx:sseMessage', function(e) {
-          var data = JSON.parse(e.detail.data);
-          var el = document.querySelector('[hx-sse="swap:progress"]');
-          if (el && data.type === 'chapter') {
-            el.innerHTML = '第' + data.chapter_no + '章已生成，正在生成漫画...';
-          } else if (el && data.type === 'comic') {
-            el.innerHTML = '第' + data.chapter_no + '章漫画完成！';
-          }
-        });
-      </script>
+
+    {{if not .chapters}}
+    <div class="text-center py-16 text-gray-400">
+      <div class="animate-pulse">
+        <p class="text-lg mb-2">AI 正在创作中...</p>
+        <p id="progress-text" class="text-sm">正在生成故事大纲</p>
+      </div>
     </div>
     {{end}}
   </main>
+
+  <script>
+    document.addEventListener('htmx:sseMessage', function(e) {
+      var data = JSON.parse(e.detail.data);
+      var el = document.getElementById('progress-text');
+      if (el && data.type === 'chapter') {
+        el.innerText = '第' + data.chapter_no + '章已生成，正在绘制漫画...';
+      } else if (el && data.type === 'comic') {
+        el.innerText = '第' + data.chapter_no + '章漫画完成！';
+      }
+      // 页面自动刷新以展示新章节
+      if (data.type === 'chapter') {
+        setTimeout(function() { location.reload(); }, 2000);
+      }
+    });
+  </script>
 </body>
 </html>

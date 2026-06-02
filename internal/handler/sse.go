@@ -2,6 +2,7 @@ package handler
 
 import (
 	"io"
+	"strconv"
 	"sync"
 	"github.com/gin-gonic/gin"
 )
@@ -16,7 +17,8 @@ func NewSSEHandler() *SSEHandler {
 }
 
 func (h *SSEHandler) Subscribe(c *gin.Context) {
-	novelID := c.GetUint("novel_id")
+	id, _ := strconv.Atoi(c.Query("novel_id"))
+	novelID := uint(id)
 	ch := make(chan string, 10)
 
 	h.mu.Lock()

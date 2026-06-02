@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"github.com/gin-gonic/gin"
@@ -8,6 +9,11 @@ import (
 	"novelforge/internal/model"
 	"novelforge/internal/service"
 )
+
+type ViewComicPage struct {
+	PanelCount int
+	ImageURLs  []string
+}
 
 type ChapterHandler struct {
 	db   *gorm.DB
@@ -35,8 +41,15 @@ func (h *ChapterHandler) View(c *gin.Context) {
 		return
 	}
 
-	var pages []model.ComicPage
-	h.db.Where("novel_id = ? AND chapter_id = ?", novelID, chapter.ID).Order("page_no").Find(&pages)
+	var dbPages []model.ComicPage
+	h.db.Where("novel_id = ? AND chapter_id = ?", novelID, chapter.ID).Order("page_no").Find(&dbPages)
+
+	var viewPages []ViewComicPage
+	for _, p := range dbPages {
+		var urls []string
+		json.Unmarshal([]byte(p.ImageURLs), &urls)
+		viewPages = append(viewPages, ViewComicPage{PanelCount: p.PanelCount, ImageURLs: urls})
+	}
 
 	var prevNo, nextNo int
 	h.db.Model(&model.Chapter{}).
@@ -49,7 +62,7 @@ func (h *ChapterHandler) View(c *gin.Context) {
 	c.HTML(http.StatusOK, "reader.html", gin.H{
 		"novel":   novel,
 		"chapter": chapter,
-		"pages":   pages,
+		"pages":   viewPages,
 		"prevNo":  prevNo,
 		"nextNo":  nextNo,
 	})
