@@ -45,7 +45,21 @@ func main() {
 	var taskQ *task.Queue
 	taskQ = task.New(
 		func(t task.Task) error {
+			// 检查作品状态：非 drafting 则跳过
 			novel, _ := novelSvc.GetByID(t.NovelID)
+			if novel.Status != "drafting" {
+				fmt.Printf("SKIP: novel=%d status=%s\n", t.NovelID, novel.Status)
+				return nil
+			}
+			// 检查章节数上限
+			var count int64
+			db.Model(&model.Chapter{}).Where("novel_id = ?", t.NovelID).Count(&count)
+			if int(count) >= cfg.MaxChapters {
+				fmt.Printf("SKIP: novel=%d chapters=%d >= max=%d\n", t.NovelID, count, cfg.MaxChapters)
+				novelSvc.MarkCompleted(t.NovelID)
+				sseH.Push(t.NovelID, fmt.Sprintf(`{"type":"progress","step":"done","detail":"已达到章节上限 %d，生成结束"}`, cfg.MaxChapters))
+				return nil
+			}
 			outline, _ := outlineSvc.GetByNovel(t.NovelID)
 
 			var aiCfg model.AIConfig
@@ -66,12 +80,17 @@ func main() {
 			sseH.Push(t.NovelID, fmt.Sprintf(`{"type":"chapter","chapter_no":%d,"status":"%s"}`,
 				t.ChapterNo, chapter.Status))
 			fmt.Printf("CHAPTER: novel=%d ch=%d status=%s\n", t.NovelID, t.ChapterNo, chapter.Status)
+			db.Model(&model.Novel{}).Where("id = ?", t.NovelID).Update("updated_at", gorm.Expr("datetime('now')"))
 			if chapter.Status == "done" {
 				taskQ.EnqueueImage(task.Task{NovelID: t.NovelID, ChapterNo: t.ChapterNo, Type: task.TaskImage})
 			}
 			return nil
 		},
 		func(t task.Task) error {
+			if !cfg.ImageEnabled {
+				fmt.Printf("SKIP-IMAGE: disabled\n")
+				return nil
+			}
 			novel, _ := novelSvc.GetByID(t.NovelID)
 			outline, _ := outlineSvc.GetByNovel(t.NovelID)
 			chapter, _ := chapterSvc.GetByNovelAndNo(t.NovelID, t.ChapterNo)
@@ -95,6 +114,7 @@ func main() {
 	)
 
 	novelSvc.SetTaskQueue(taskQ)
+	novelSvc.SetMaxChapters(cfg.MaxChapters)
 	novelSvc.SetOutlineService(outlineSvc)
 	novelSvc.SetChapterService(chapterSvc)
 	novelSvc.SetComicService(comicSvc)
@@ -126,6 +146,8 @@ func main() {
 		auth.GET("/", novelH.Home)
 		auth.POST("/novel", novelH.Create)
 		auth.GET("/novel/:id", novelH.Detail)
+		auth.POST("/novel/:id/stop", novelH.Stop)
+		auth.POST("/novel/:id/resume", novelH.Resume)
 		auth.GET("/novel/:id/chapter/:no", chapterH.View)
 		auth.GET("/api/sse", sseH.Subscribe)
 		auth.GET("/ai-config", aiConfigH.Page)

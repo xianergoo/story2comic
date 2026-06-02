@@ -39,6 +39,7 @@ func (q *Queue) EnqueueImage(t Task) { q.imageChan <- t }
 
 func (q *Queue) writeWorker() {
 	for t := range q.writeChan {
+		fmt.Printf("TASK-WRITE: novel=%d ch=%d\n", t.NovelID, t.ChapterNo)
 		if err := q.writeFunc(t); err != nil {
 			fmt.Printf("write task failed: novel=%d ch=%d err=%v\n", t.NovelID, t.ChapterNo, err)
 		}
@@ -47,6 +48,7 @@ func (q *Queue) writeWorker() {
 
 func (q *Queue) imageWorker() {
 	for t := range q.imageChan {
+		fmt.Printf("TASK-IMAGE: novel=%d ch=%d\n", t.NovelID, t.ChapterNo)
 		if err := q.imageFunc(t); err != nil {
 			fmt.Printf("image task failed: novel=%d ch=%d err=%v\n", t.NovelID, t.ChapterNo, err)
 		}

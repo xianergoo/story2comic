@@ -19,27 +19,39 @@
   </nav>
 
   <main class="max-w-6xl mx-auto px-4 py-6">
-    <!-- 进度调试面板 -->
-    <div class="bg-gray-900 text-green-400 font-mono text-xs rounded-lg p-4 mb-4 max-h-60 overflow-y-auto"
+    <!-- 调试面板 -->
+    <div class="bg-gray-900 text-green-400 font-mono text-xs rounded-lg p-3 mb-3 max-h-40 overflow-y-auto"
          hx-ext="sse"
          sse-connect="/api/sse?novel_id={{.novel.ID}}"
-         sse-swap="log"
-         id="debug-log">
-      <div sse-swap="log"></div>
-    </div>
+         id="debug-log"></div>
 
     <!-- 状态条 -->
-    <div class="flex items-center gap-3 mb-4">
-      <span class="text-sm text-gray-500 max-w-md truncate">{{.novel.Summary}}</span>
-      <span class="text-xs px-2 py-0.5 rounded-full {{if eq .novel.Status "completed"}}bg-green-100 text-green-700{{else if eq .novel.Status "failed"}}bg-red-100 text-red-700{{else}}bg-indigo-100 text-indigo-700{{end}}">状态: {{.novel.Status}}</span>
-      <span class="text-xs text-gray-400">模式: {{.novel.Mode}} | 漫画: {{.novel.ImageMode}}</span>
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <span class="text-xs px-2 py-0.5 rounded-full {{if eq .novel.Status "completed"}}bg-green-100 text-green-700{{else if eq .novel.Status "stopped"}}bg-gray-100 text-gray-500{{else if eq .novel.Status "failed"}}bg-red-100 text-red-700{{else}}bg-indigo-100 text-indigo-700{{end}}">状态: {{.novel.Status}}</span>
+      <span class="text-xs text-gray-400">| 模式: {{.novel.Mode}}</span>
+
+      <span class="text-xs text-gray-400">| 文字: {{.textDone}}/{{len .chapters}}章</span>
+      <span class="text-xs text-gray-400">| 漫画: {{.comicDone}}页</span>
+
+      <span class="text-xs text-gray-400">| 最后活动: {{.novel.UpdatedAt.Format "15:04:05"}}</span>
+
+      {{if eq .novel.Status "drafting"}}
+      <form method="POST" action="/novel/{{.novel.ID}}/stop" class="inline">
+        <button class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-full hover:bg-red-200">⏹ 停止</button>
+      </form>
+      {{end}}
+      {{if or (eq .novel.Status "stopped") (eq .novel.Status "interrupted")}}
+      <form method="POST" action="/novel/{{.novel.ID}}/resume" class="inline">
+        <button class="text-xs bg-green-100 text-green-600 px-3 py-1 rounded-full hover:bg-green-200">▶ 继续生成</button>
+      </form>
+      {{end}}
     </div>
 
     <!-- 大纲 -->
     {{if .outline.Content}}
-    <details class="bg-white rounded-lg shadow-sm border mb-4" open>
+    <details class="bg-white rounded-lg shadow-sm border mb-4">
       <summary class="px-4 py-3 font-semibold cursor-pointer hover:bg-gray-50">📋 故事大纲</summary>
-      <div class="px-4 pb-4 text-sm text-gray-700 whitespace-pre-wrap">{{.outline.Content}}</div>
+      <div class="px-4 pb-4 text-sm text-gray-700 whitespace-pre-wrap max-h-60 overflow-y-auto">{{.outline.Content}}</div>
     </details>
     {{end}}
 
@@ -54,13 +66,6 @@
       </a>
       {{end}}
     </div>
-
-    {{if not .chapters}}
-    <div class="text-center py-16 text-gray-400">
-      <p class="text-lg">等待生成中，查看上方调试面板...</p>
-      <p class="text-sm mt-2">自动刷新中，也可手动按 F5 刷新</p>
-    </div>
-    {{end}}
   </main>
 
   <script>
@@ -72,32 +77,16 @@
       log.appendChild(line);
       log.scrollTop = log.scrollHeight;
     }
-
     document.addEventListener('htmx:sseMessage', function(e) {
       try {
-        var data = JSON.parse(e.detail.data);
-        if (data.type === 'progress') {
-          appendLog(data.step + ': ' + data.detail, '#60a5fa');
-          if (data.step === 'outline' && data.detail === '大纲生成完成') {
-            appendLog('大纲已就绪，刷新页面可查看', '#fbbf24');
-          }
-        } else if (data.type === 'chapter') {
-          appendLog('第' + data.chapter_no + '章: ' + data.status, '#4ade80');
-          setTimeout(function() { location.reload(); }, 2000);
-        } else if (data.type === 'comic') {
-          appendLog('第' + data.chapter_no + '章漫画完成', '#a78bfa');
-          setTimeout(function() { location.reload(); }, 2000);
-        } else if (data.type === 'error') {
-          appendLog('ERROR: ' + data.msg, '#f87171');
-        }
-      } catch(err) {
-        appendLog('RAW: ' + e.detail.data, '#94a3b8');
-      }
+        var d = JSON.parse(e.detail.data);
+        if (d.type === 'progress') appendLog(d.step + ': ' + d.detail, '#60a5fa');
+        else if (d.type === 'chapter') { appendLog('第'+d.chapter_no+'章: '+d.status, '#4ade80'); setTimeout(function(){location.reload()},2000); }
+        else if (d.type === 'comic') appendLog('第'+d.chapter_no+'章漫画完成', '#a78bfa');
+        else if (d.type === 'error') appendLog('ERROR: '+d.msg, '#f87171');
+      } catch(err) { appendLog(e.detail.data, '#94a3b8'); }
     });
-
-    document.addEventListener('htmx:sseError', function(e) {
-      appendLog('SSE连接失败', '#f87171');
-    });
+    document.addEventListener('htmx:sseError', function(e) { appendLog('SSE连接失败', '#f87171'); });
   </script>
 </body>
 </html>

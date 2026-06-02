@@ -12,15 +12,18 @@ import (
 type ProgressCallback func(novelID uint, step, detail string)
 
 type NovelService struct {
-	db         *gorm.DB
-	outlineSvc *OutlineService
-	chapterSvc *ChapterService
-	comicSvc   *ComicService
-	taskQ      *task.Queue
-	onProgress ProgressCallback
+	db          *gorm.DB
+	outlineSvc  *OutlineService
+	chapterSvc  *ChapterService
+	comicSvc    *ComicService
+	taskQ       *task.Queue
+	onProgress  ProgressCallback
+	maxChapters int
 }
 
 func NewNovelService(db *gorm.DB) *NovelService { return &NovelService{db: db} }
+
+func (s *NovelService) SetMaxChapters(n int) { s.maxChapters = n }
 
 func (s *NovelService) SetOnProgress(fn ProgressCallback) { s.onProgress = fn }
 
@@ -118,7 +121,10 @@ func (s *NovelService) StartGeneration(novelID uint) error {
 	json.Unmarshal([]byte(outline.ChapterPlan), &chapterPlan)
 	s.push(novelID, "plan", fmt.Sprintf("共 %d 章，开始逐章写作...", len(chapterPlan)))
 
-	for _, cp := range chapterPlan {
+	for i, cp := range chapterPlan {
+		if s.maxChapters > 0 && i >= s.maxChapters {
+			break
+		}
 		s.taskQ.EnqueueWrite(task.Task{NovelID: novelID, ChapterNo: cp.ChapterNo})
 	}
 
@@ -133,6 +139,32 @@ func (s *NovelService) push(novelID uint, step, detail string) {
 	}
 }
 
+func (s *NovelService) MarkCompleted(novelID uint) {
+	s.db.Model(&model.Novel{}).Where("id = ?", novelID).Update("status", "completed")
+}
+
 func CreateProviderFromConfig(cfg *model.AIConfig) ai.Provider {
 	return ai.NewProvider(cfg.Provider, cfg.APIKey, cfg.BaseURL, cfg.TextModel, cfg.ImageModel)
+}
+
+func (s *NovelService) Resume(novelID uint) error {
+	outline, err := s.outlineSvc.GetByNovel(novelID)
+	if err != nil {
+		return fmt.Errorf("大纲不存在")
+	}
+	var plan []ChapterPlanItem
+	json.Unmarshal([]byte(outline.ChapterPlan), &plan)
+
+	for i, cp := range plan {
+		if s.maxChapters > 0 && i >= s.maxChapters {
+			break
+		}
+		var existing model.Chapter
+		err := s.db.Where("novel_id = ? AND chapter_no = ? AND status = ?", novelID, cp.ChapterNo, "done").First(&existing).Error
+		if err != nil {
+			s.taskQ.EnqueueWrite(task.Task{NovelID: novelID, ChapterNo: cp.ChapterNo})
+		}
+	}
+	s.db.Model(&model.Novel{}).Where("id = ?", novelID).Update("status", "drafting")
+	return nil
 }

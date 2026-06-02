@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type OpenAIProvider struct {
@@ -24,7 +25,7 @@ func newOpenAI(apiKey, baseURL, textModel, imageModel string) *OpenAIProvider {
 		baseURL:    baseURL,
 		textModel:  textModel,
 		imageModel: imageModel,
-		client:     &http.Client{},
+		client:     &http.Client{Timeout: 180 * time.Second},
 	}
 }
 

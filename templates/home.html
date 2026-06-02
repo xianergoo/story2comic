@@ -31,13 +31,16 @@
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
       {{range .novels}}
       <a href="/novel/{{.ID}}" class="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow p-4">
-        <div class="text-xs mb-2">
-          {{if eq .Mode "inspiration"}}<span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">灵感起步</span>
-          {{else if eq .Mode "outline"}}<span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">章纲驱动</span>
-          {{else}}<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">盲盒创作</span>{{end}}
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs">
+            {{if eq .Mode "inspiration"}}<span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">灵感</span>
+            {{else if eq .Mode "outline"}}<span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">章纲</span>
+            {{else}}<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">盲盒</span>{{end}}
+          </span>
+          <span class="text-xs {{if eq .Status "completed"}}text-green-500{{else if eq .Status "stopped"}}text-gray-400{{else if eq .Status "failed"}}text-red-500{{else}}text-indigo-500{{end}}">{{.Status}}</span>
         </div>
         <h3 class="font-semibold mb-1 truncate">{{.Title}}</h3>
-        <p class="text-xs text-gray-400">{{.Status}}</p>
+        <p class="text-xs text-gray-400">{{if .ChapterCount}}{{.ChapterCount}} 章{{else}}待生成{{end}}</p>
       </a>
       {{end}}
     </div>
