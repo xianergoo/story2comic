@@ -47,8 +47,8 @@ func main() {
 		func(t task.Task) error {
 			// 检查作品状态：非 drafting 则跳过
 			novel, _ := novelSvc.GetByID(t.NovelID)
-			if novel.Status != "drafting" {
-				fmt.Printf("SKIP: novel=%d status=%s\n", t.NovelID, novel.Status)
+			if novel.TextStatus != "writing" {
+				fmt.Printf("SKIP: novel=%d text_status=%s\n", t.NovelID, novel.TextStatus)
 				return nil
 			}
 			// 检查章节数上限
@@ -56,8 +56,10 @@ func main() {
 			db.Model(&model.Chapter{}).Where("novel_id = ?", t.NovelID).Count(&count)
 			if int(count) >= cfg.MaxChapters {
 				fmt.Printf("SKIP: novel=%d chapters=%d >= max=%d\n", t.NovelID, count, cfg.MaxChapters)
-				novelSvc.MarkCompleted(t.NovelID)
-				sseH.Push(t.NovelID, fmt.Sprintf(`{"type":"progress","step":"done","detail":"已达到章节上限 %d，生成结束"}`, cfg.MaxChapters))
+				db.Model(&model.Novel{}).Where("id = ?", t.NovelID).Updates(map[string]any{
+					"status": "completed", "text_status": "done",
+				})
+				sseH.Push(t.NovelID, fmt.Sprintf(`{"type":"progress","step":"done","detail":"已达到章节上限 %d，文字生成结束"}`, cfg.MaxChapters))
 				return nil
 			}
 			outline, _ := outlineSvc.GetByNovel(t.NovelID)
@@ -92,6 +94,10 @@ func main() {
 				return nil
 			}
 			novel, _ := novelSvc.GetByID(t.NovelID)
+			if novel.ImageStatus != "generating" {
+				fmt.Printf("SKIP-IMAGE: novel=%d image_status=%s\n", t.NovelID, novel.ImageStatus)
+				return nil
+			}
 			outline, _ := outlineSvc.GetByNovel(t.NovelID)
 			chapter, _ := chapterSvc.GetByNovelAndNo(t.NovelID, t.ChapterNo)
 

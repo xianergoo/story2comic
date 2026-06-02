@@ -27,24 +27,50 @@
 
     <!-- 状态条 -->
     <div class="flex flex-wrap items-center gap-2 mb-4">
-      <span class="text-xs px-2 py-0.5 rounded-full {{if eq .novel.Status "completed"}}bg-green-100 text-green-700{{else if eq .novel.Status "stopped"}}bg-gray-100 text-gray-500{{else if eq .novel.Status "failed"}}bg-red-100 text-red-700{{else}}bg-indigo-100 text-indigo-700{{end}}">状态: {{.novel.Status}}</span>
-      <span class="text-xs text-gray-400">| 模式: {{.novel.Mode}}</span>
+      <span class="text-sm font-semibold text-gray-700">{{.novel.Title}}</span>
+      <span class="text-xs text-gray-400">| {{.novel.Mode}}</span>
 
-      <span class="text-xs text-gray-400">| 文字: {{.textDone}}/{{len .chapters}}章</span>
-      <span class="text-xs text-gray-400">| 漫画: {{.comicDone}}页</span>
-
-      <span class="text-xs text-gray-400">| 最后活动: {{.novel.UpdatedAt.Format "15:04:05"}}</span>
-
-      {{if eq .novel.Status "drafting"}}
-      <form method="POST" action="/novel/{{.novel.ID}}/stop" class="inline">
-        <button class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-full hover:bg-red-200">⏹ 停止</button>
+      <!-- 文字管线 -->
+      <span class="ml-3 text-xs px-2 py-0.5 rounded-full
+        {{if eq .novel.TextStatus "writing"}}bg-blue-100 text-blue-700
+        {{else if eq .novel.TextStatus "done"}}bg-green-100 text-green-700
+        {{else if eq .novel.TextStatus "paused"}}bg-amber-100 text-amber-700
+        {{else}}bg-gray-100 text-gray-500{{end}}">
+        文字: {{.novel.TextStatus}}
+      </span>
+      <span class="text-xs text-gray-400">{{.textDone}}/{{len .chapters}}章</span>
+      {{if eq .novel.TextStatus "writing"}}
+      <form method="POST" action="/novel/{{.novel.ID}}/stop?pipeline=text" class="inline">
+        <button class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded hover:bg-red-200">⏹ 文字</button>
       </form>
       {{end}}
-      {{if or (eq .novel.Status "stopped") (eq .novel.Status "interrupted")}}
-      <form method="POST" action="/novel/{{.novel.ID}}/resume" class="inline">
-        <button class="text-xs bg-green-100 text-green-600 px-3 py-1 rounded-full hover:bg-green-200">▶ 继续生成</button>
+      {{if or (eq .novel.TextStatus "paused") (eq .novel.TextStatus "idle")}}
+      <form method="POST" action="/novel/{{.novel.ID}}/resume?pipeline=text" class="inline">
+        <button class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded hover:bg-green-200">▶ 文字</button>
       </form>
       {{end}}
+
+      <!-- 漫画管线 -->
+      <span class="ml-3 text-xs px-2 py-0.5 rounded-full
+        {{if eq .novel.ImageStatus "generating"}}bg-purple-100 text-purple-700
+        {{else if eq .novel.ImageStatus "done"}}bg-green-100 text-green-700
+        {{else if eq .novel.ImageStatus "paused"}}bg-amber-100 text-amber-700
+        {{else}}bg-gray-100 text-gray-500{{end}}">
+        漫画: {{.novel.ImageStatus}}
+      </span>
+      <span class="text-xs text-gray-400">{{.comicDone}}页</span>
+      {{if eq .novel.ImageStatus "generating"}}
+      <form method="POST" action="/novel/{{.novel.ID}}/stop?pipeline=image" class="inline">
+        <button class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded hover:bg-red-200">⏹ 漫画</button>
+      </form>
+      {{end}}
+      {{if or (eq .novel.ImageStatus "paused") (eq .novel.ImageStatus "idle")}}
+      <form method="POST" action="/novel/{{.novel.ID}}/resume?pipeline=image" class="inline">
+        <button class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded hover:bg-purple-200">▶ 漫画</button>
+      </form>
+      {{end}}
+
+      <span class="text-xs text-gray-400">| {{.novel.UpdatedAt.Format "15:04:05"}}</span>
     </div>
 
     <!-- 大纲 -->

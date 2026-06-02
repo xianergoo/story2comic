@@ -129,6 +129,7 @@ func (s *NovelService) StartGeneration(novelID uint) error {
 	}
 
 	novel.Status = "drafting"
+	novel.TextStatus = "writing"
 	s.db.Save(novel)
 	return nil
 }

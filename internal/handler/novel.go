@@ -75,13 +75,28 @@ func (h *NovelHandler) StartGeneration(c *gin.Context) {
 
 func (h *NovelHandler) Stop(c *gin.Context) {
 	novelID, _ := strconv.Atoi(c.Param("id"))
-	h.db.Model(&model.Novel{}).Where("id = ?", novelID).Update("status", "stopped")
+	pipeline := c.DefaultQuery("pipeline", "text")
+	if pipeline == "image" {
+		h.db.Model(&model.Novel{}).Where("id = ?", novelID).Update("image_status", "paused")
+	} else {
+		h.db.Model(&model.Novel{}).Where("id = ?", novelID).Updates(map[string]any{
+			"text_status": "paused", "status": "stopped",
+		})
+	}
 	c.Redirect(http.StatusFound, "/novel/"+strconv.Itoa(novelID))
 }
 
 func (h *NovelHandler) Resume(c *gin.Context) {
 	novelID, _ := strconv.Atoi(c.Param("id"))
-	go h.svc.Resume(uint(novelID))
+	pipeline := c.DefaultQuery("pipeline", "text")
+	if pipeline == "image" {
+		h.db.Model(&model.Novel{}).Where("id = ?", novelID).Update("image_status", "generating")
+	} else {
+		h.db.Model(&model.Novel{}).Where("id = ?", novelID).Updates(map[string]any{
+			"text_status": "writing", "status": "drafting",
+		})
+		go h.svc.Resume(uint(novelID))
+	}
 	c.Redirect(http.StatusFound, "/novel/"+strconv.Itoa(novelID))
 }
 
