@@ -48,7 +48,11 @@ func (h *NovelHandler) Create(c *gin.Context) {
 		c.String(http.StatusInternalServerError, err.Error())
 		return
 	}
-	go h.svc.StartGeneration(novel.ID)
+	go func() {
+		if err := h.svc.StartGeneration(novel.ID); err != nil {
+			println("StartGeneration failed:", err.Error())
+		}
+	}()
 	c.Redirect(http.StatusFound, "/novel/"+strconv.Itoa(int(novel.ID)))
 }
 

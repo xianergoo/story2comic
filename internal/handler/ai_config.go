@@ -22,6 +22,14 @@ func (h *AIConfigHandler) Page(c *gin.Context) {
 
 func (h *AIConfigHandler) Create(c *gin.Context) {
 	userID := c.GetUint("user_id")
+
+	// 第一个配置自动设为默认
+	var count int64
+	h.db.Model(&model.AIConfig{}).Where("user_id = ?", userID).Count(&count)
+	if count == 0 {
+		c.Request.PostForm.Set("is_default", "on")
+	}
+
 	isDefault := c.PostForm("is_default") == "on"
 	if isDefault {
 		h.db.Model(&model.AIConfig{}).Where("user_id = ?", userID).Update("is_default", false)

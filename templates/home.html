@@ -19,6 +19,9 @@
   </nav>
 
   <main class="max-w-6xl mx-auto px-4 py-6" x-data="{ showModal: false }">
+    {{if .error}}
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">{{.error}}</div>
+    {{end}}
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">我的书架</h1>
       <button @click="showModal = true" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700">+ 新建作品</button>
