@@ -35,7 +35,11 @@ func (h *NovelHandler) Create(c *gin.Context) {
 		var defaultCfg model.AIConfig
 		err := h.db.Where("user_id = ? AND is_default = ?", userID, true).First(&defaultCfg).Error
 		if err != nil {
-			h.db.Where("user_id = ?", userID).First(&defaultCfg)
+			err = h.db.Where("user_id = ?", userID).First(&defaultCfg).Error
+		}
+		if err != nil {
+			c.HTML(http.StatusBadRequest, "home.html", gin.H{"novels": nil, "error": "请先在 AI配置页面 添加 API Key 配置"})
+			return
 		}
 		aiConfigID = int(defaultCfg.ID)
 	}

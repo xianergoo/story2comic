@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"novelforge/internal/ai"
 	"novelforge/internal/model"
 	"novelforge/internal/task"
@@ -55,6 +56,15 @@ func (s *NovelService) StartGeneration(novelID uint) error {
 	if err != nil {
 		return err
 	}
+
+	// 按作品配置创建 AI Provider
+	var aiCfg model.AIConfig
+	if err := s.db.First(&aiCfg, novel.AIConfigID).Error; err != nil {
+		return fmt.Errorf("AI 配置不存在，请先在 AI配置页面 中添加")
+	}
+	provider := CreateProviderFromConfig(&aiCfg)
+	s.outlineSvc.SetProvider(provider)
+	s.chapterSvc.SetProvider(provider)
 
 	var outlineInput string
 	switch novel.Mode {
