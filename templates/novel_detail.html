@@ -32,8 +32,10 @@
 
       <!-- 文字管线 -->
       <span class="ml-2 px-2 py-0.5 rounded-full {{if eq .novel.TextStatus "writing"}}bg-blue-100 text-blue-700{{else if eq .novel.TextStatus "done"}}bg-green-100 text-green-700{{else if eq .novel.TextStatus "paused"}}bg-amber-100 text-amber-700{{else}}bg-gray-100 text-gray-500{{end}}">
-        文字: {{.novel.TextStatus}} ({{.textDone}}/{{len .chapters}}章)
+        文字: {{.novel.TextStatus}}
       </span>
+      <span class="text-gray-400">| 已完成 {{.textDone}}/{{.planned}} 章</span>
+      {{if .nextNo}}<span class="text-amber-600 text-xs">(第{{.nextNo}}章待生成)</span>{{end}}
       {{if eq .novel.TextStatus "writing"}}
       <form method="POST" action="/novel/{{.novel.ID}}/stop?pipeline=text" class="inline"><button class="bg-red-100 text-red-600 px-2 py-0.5 rounded hover:bg-red-200">⏹</button></form>
       {{end}}
@@ -83,13 +85,28 @@
 
     <!-- 章节 -->
     <h2 class="font-semibold mb-3">章节列表</h2>
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
       {{range .chapters}}
-      <a href="/novel/{{$.novel.ID}}/chapter/{{.ChapterNo}}" class="bg-white rounded-lg shadow-sm border p-3 hover:shadow-md transition-shadow">
-        <span class="text-xs text-gray-400">第{{.ChapterNo}}章</span>
-        <p class="font-medium text-sm truncate">{{.Title}}</p>
-        <span class="text-xs {{if eq .Status "done"}}text-green-500{{else}}text-amber-500{{end}}">{{.Status}}</span>
-      </a>
+      <div class="bg-white rounded-lg shadow-sm border p-3 flex items-center justify-between">
+        <a href="/novel/{{$.novel.ID}}/chapter/{{.ChapterNo}}" class="flex-1 min-w-0">
+          <span class="text-xs text-gray-400">第{{.ChapterNo}}章</span>
+          <p class="font-medium text-sm truncate">{{.Title}}</p>
+          <span class="text-xs {{if eq .Status "done"}}text-green-500{{else}}text-amber-500{{end}}">{{.Status}}</span>
+        </a>
+        {{if eq .Status "done"}}
+        <button onclick="this.nextElementSibling.showModal()" class="text-xs text-gray-400 hover:text-indigo-500 ml-2 shrink-0">🔄</button>
+        <dialog class="rounded-lg p-4 shadow-xl border max-w-sm">
+          <form method="POST" action="/novel/{{$.novel.ID}}/chapter/{{.ChapterNo}}/regenerate" class="space-y-2">
+            <p class="text-sm font-semibold">重新生成第{{.ChapterNo}}章</p>
+            <textarea name="suggestion" rows="2" placeholder="修改建议（可选）：主角性格更果断一些..." class="w-full px-3 py-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-400 resize-none"></textarea>
+            <div class="flex gap-2">
+              <button type="submit" class="flex-1 bg-indigo-600 text-white text-xs py-1.5 rounded hover:bg-indigo-700">重新生成</button>
+              <button type="button" onclick="this.closest('dialog').close()" class="px-3 py-1.5 border rounded text-xs text-gray-500">取消</button>
+            </div>
+          </form>
+        </dialog>
+        {{end}}
+      </div>
       {{end}}
     </div>
   </main>

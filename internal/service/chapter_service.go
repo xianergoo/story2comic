@@ -29,7 +29,7 @@ func (s *ChapterService) GetByNovelAndNo(novelID uint, chapterNo int) (*model.Ch
 	return &ch, err
 }
 
-func (s *ChapterService) Write(novelID uint, chapterNo int, chapterPlan []ChapterPlanItem, outline *model.Outline) (*model.Chapter, error) {
+func (s *ChapterService) Write(novelID uint, chapterNo int, chapterPlan []ChapterPlanItem, outline *model.Outline, suggestion string) (*model.Chapter, error) {
 	plan := chapterPlan[chapterNo-1]
 
 	var prevChapters []model.Chapter
@@ -52,6 +52,9 @@ func (s *ChapterService) Write(novelID uint, chapterNo int, chapterPlan []Chapte
 		"故事大纲：%s\n\n前文摘要：%s\n\n人物设定：%s\n\n世界观：%s\n\n本章节标题：%s\n本章节大纲：%s\n请写出本章正文（约800字）：",
 		outline.Content, contextSnapshot, outline.CharacterSheets, outline.WorldSetting, plan.Title, plan.Summary,
 	)
+	if suggestion != "" {
+		userPrompt += "\n\n特别注意（用户建议）：" + suggestion
+	}
 
 	resp, err := s.provider.Chat(ai.ChatRequest{
 		Messages: []ai.ChatMessage{

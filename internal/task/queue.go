@@ -10,9 +10,10 @@ const (
 )
 
 type Task struct {
-	NovelID   uint
-	ChapterNo int
-	Type      TaskType
+	NovelID    uint
+	ChapterNo  int
+	Type       TaskType
+	Suggestion string
 }
 
 type Queue struct {

@@ -142,6 +142,13 @@ func (s *NovelService) push(novelID uint, step, detail string) {
 	}
 }
 
+func (s *NovelService) EnqueueChapterWithSuggestion(novelID uint, chapterNo int, suggestion string) {
+	s.db.Model(&model.Novel{}).Where("id = ?", novelID).Updates(map[string]any{
+		"text_status": "writing", "status": "drafting",
+	})
+	s.taskQ.EnqueueWrite(task.Task{NovelID: novelID, ChapterNo: chapterNo, Suggestion: suggestion})
+}
+
 func (s *NovelService) MarkCompleted(novelID uint) {
 	s.db.Model(&model.Novel{}).Where("id = ?", novelID).Update("status", "completed")
 }

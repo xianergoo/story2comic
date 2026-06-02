@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -114,12 +115,32 @@ func (h *NovelHandler) Detail(c *gin.Context) {
 	var outline model.Outline
 	h.db.Where("novel_id = ?", novelID).Order("version DESC").First(&outline)
 
-	var textDone, comicDone int
+	var textDone, planned, nextNo int
 	for _, ch := range chapters {
 		if ch.Status == "done" {
 			textDone++
 		}
 	}
+	// 从大纲解析计划章节数
+	var chapterPlan []service.ChapterPlanItem
+	json.Unmarshal([]byte(outline.ChapterPlan), &chapterPlan)
+	planned = len(chapterPlan)
+	// 找下一个待生成的章节
+	for _, cp := range chapterPlan {
+		found := false
+		for _, ch := range chapters {
+			if ch.ChapterNo == cp.ChapterNo && ch.Status == "done" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			nextNo = cp.ChapterNo
+			break
+		}
+	}
+
+	var comicDone int
 	for _, p := range pages {
 		if p.Status == "done" {
 			comicDone++
@@ -132,6 +153,19 @@ func (h *NovelHandler) Detail(c *gin.Context) {
 		"pages":     pages,
 		"outline":   outline,
 		"textDone":  textDone,
+		"planned":   planned,
+		"nextNo":    nextNo,
 		"comicDone": comicDone,
 	})
+}
+
+func (h *NovelHandler) RegenerateChapter(c *gin.Context) {
+	novelID, _ := strconv.Atoi(c.Param("id"))
+	chapterNo, _ := strconv.Atoi(c.Param("no"))
+	suggestion := c.PostForm("suggestion")
+	// 删除旧章节，重置状态
+	h.db.Where("novel_id = ? AND chapter_no = ?", novelID, chapterNo).Delete(&model.Chapter{})
+	// 重新入队，附上建议
+	h.svc.EnqueueChapterWithSuggestion(uint(novelID), chapterNo, suggestion)
+	c.Redirect(http.StatusFound, "/novel/"+strconv.Itoa(novelID))
 }

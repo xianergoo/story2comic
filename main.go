@@ -72,7 +72,7 @@ func main() {
 
 			var plan []service.ChapterPlanItem
 			json.Unmarshal([]byte(outline.ChapterPlan), &plan)
-			chapter, err := chapterSvc.Write(t.NovelID, t.ChapterNo, plan, outline)
+			chapter, err := chapterSvc.Write(t.NovelID, t.ChapterNo, plan, outline, t.Suggestion)
 			if err != nil {
 				fmt.Printf("ERROR write: novel=%d ch=%d err=%v\n", t.NovelID, t.ChapterNo, err)
 				sseH.Push(t.NovelID, fmt.Sprintf(`{"type":"error","chapter_no":%d,"msg":"写文失败: %s"}`,
@@ -154,6 +154,7 @@ func main() {
 		auth.GET("/novel/:id", novelH.Detail)
 		auth.POST("/novel/:id/stop", novelH.Stop)
 		auth.POST("/novel/:id/resume", novelH.Resume)
+		auth.POST("/novel/:id/chapter/:no/regenerate", novelH.RegenerateChapter)
 		auth.GET("/novel/:id/chapter/:no", chapterH.View)
 		auth.GET("/api/sse", sseH.Subscribe)
 		auth.GET("/ai-config", aiConfigH.Page)
