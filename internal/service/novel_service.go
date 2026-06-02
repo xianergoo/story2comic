@@ -9,15 +9,20 @@ import (
 	"gorm.io/gorm"
 )
 
+type ProgressCallback func(novelID uint, step, detail string)
+
 type NovelService struct {
 	db         *gorm.DB
 	outlineSvc *OutlineService
 	chapterSvc *ChapterService
 	comicSvc   *ComicService
 	taskQ      *task.Queue
+	onProgress ProgressCallback
 }
 
 func NewNovelService(db *gorm.DB) *NovelService { return &NovelService{db: db} }
+
+func (s *NovelService) SetOnProgress(fn ProgressCallback) { s.onProgress = fn }
 
 func (s *NovelService) SetOutlineService(svc *OutlineService) { s.outlineSvc = svc }
 func (s *NovelService) SetChapterService(svc *ChapterService) { s.chapterSvc = svc }
@@ -52,16 +57,18 @@ func (s *NovelService) Create(userID uint, title, summary, mode, imageMode strin
 }
 
 func (s *NovelService) StartGeneration(novelID uint) error {
+	fmt.Printf("GEN-START: novel_id=%d\n", novelID)
 	novel, err := s.GetByID(novelID)
 	if err != nil {
 		return err
 	}
+	s.push(novelID, "start", "开始生成")
 
-	// 按作品配置创建 AI Provider
 	var aiCfg model.AIConfig
 	if err := s.db.First(&aiCfg, novel.AIConfigID).Error; err != nil {
 		return fmt.Errorf("AI 配置不存在，请先在 AI配置页面 中添加")
 	}
+	fmt.Printf("GEN-CFG: provider=%s model=%s\n", aiCfg.Provider, aiCfg.TextModel)
 	provider := CreateProviderFromConfig(&aiCfg)
 	s.outlineSvc.SetProvider(provider)
 	s.chapterSvc.SetProvider(provider)
@@ -69,12 +76,14 @@ func (s *NovelService) StartGeneration(novelID uint) error {
 	var outlineInput string
 	switch novel.Mode {
 	case "blindbox":
+		s.push(novelID, "title", "AI 正在构思标题和故事梗概...")
 		titleResp, err := s.outlineSvc.provider.Chat(ai.ChatRequest{
 			Messages: []ai.ChatMessage{
 				{Role: "system", Content: "你是一个创意小说作者。请自动想一个引人入胜的小说题材和标题。输出纯 JSON：{\"title\":\"...\",\"summary\":\"一句话梗概\"}"},
 			},
 		})
 		if err != nil {
+			s.push(novelID, "error", "标题生成失败: "+err.Error())
 			return err
 		}
 		var blindResult struct {
@@ -86,6 +95,7 @@ func (s *NovelService) StartGeneration(novelID uint) error {
 		novel.Summary = blindResult.Summary
 		s.db.Save(novel)
 		outlineInput = blindResult.Summary
+		s.push(novelID, "title", fmt.Sprintf("标题: %s / %s", blindResult.Title, blindResult.Summary))
 
 	case "outline", "inspiration":
 		outlineInput = novel.Summary
@@ -94,13 +104,19 @@ func (s *NovelService) StartGeneration(novelID uint) error {
 		outlineInput = novel.Summary
 	}
 
+	s.push(novelID, "outline", "正在生成故事大纲...")
 	outline, err := s.outlineSvc.Generate(novel, outlineInput)
 	if err != nil {
+		fmt.Printf("GEN-ERR: outline failed: %v\n", err)
+		s.push(novelID, "error", "大纲生成失败: "+err.Error())
 		return err
 	}
+	fmt.Printf("GEN-OUTLINE: done\n")
+	s.push(novelID, "outline", "大纲生成完成")
 
 	var chapterPlan []ChapterPlanItem
 	json.Unmarshal([]byte(outline.ChapterPlan), &chapterPlan)
+	s.push(novelID, "plan", fmt.Sprintf("共 %d 章，开始逐章写作...", len(chapterPlan)))
 
 	for _, cp := range chapterPlan {
 		s.taskQ.EnqueueWrite(task.Task{NovelID: novelID, ChapterNo: cp.ChapterNo})
@@ -109,6 +125,12 @@ func (s *NovelService) StartGeneration(novelID uint) error {
 	novel.Status = "drafting"
 	s.db.Save(novel)
 	return nil
+}
+
+func (s *NovelService) push(novelID uint, step, detail string) {
+	if s.onProgress != nil {
+		s.onProgress(novelID, step, detail)
+	}
 }
 
 func CreateProviderFromConfig(cfg *model.AIConfig) ai.Provider {

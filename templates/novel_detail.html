@@ -19,18 +19,33 @@
   </nav>
 
   <main class="max-w-6xl mx-auto px-4 py-6">
-    <div class="flex items-center gap-3 mb-4">
-      <span class="text-sm text-gray-500 max-w-md truncate">{{.novel.Summary}}</span>
-      <span class="text-xs px-2 py-0.5 rounded-full {{if eq .novel.Status "completed"}}bg-green-100 text-green-700{{else if eq .novel.Status "failed"}}bg-red-100 text-red-700{{else}}bg-indigo-100 text-indigo-700{{end}}">{{.novel.Status}}</span>
-    </div>
-
-    <div class="flex gap-2 mb-4"
+    <!-- 进度调试面板 -->
+    <div class="bg-gray-900 text-green-400 font-mono text-xs rounded-lg p-4 mb-4 max-h-60 overflow-y-auto"
          hx-ext="sse"
          sse-connect="/api/sse?novel_id={{.novel.ID}}"
-         sse-swap="progress"
-         hx-swap="none"></div>
+         sse-swap="log"
+         id="debug-log">
+      <div sse-swap="log"></div>
+    </div>
 
-    <div id="chapter-list" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+    <!-- 状态条 -->
+    <div class="flex items-center gap-3 mb-4">
+      <span class="text-sm text-gray-500 max-w-md truncate">{{.novel.Summary}}</span>
+      <span class="text-xs px-2 py-0.5 rounded-full {{if eq .novel.Status "completed"}}bg-green-100 text-green-700{{else if eq .novel.Status "failed"}}bg-red-100 text-red-700{{else}}bg-indigo-100 text-indigo-700{{end}}">状态: {{.novel.Status}}</span>
+      <span class="text-xs text-gray-400">模式: {{.novel.Mode}} | 漫画: {{.novel.ImageMode}}</span>
+    </div>
+
+    <!-- 大纲 -->
+    {{if .outline.Content}}
+    <details class="bg-white rounded-lg shadow-sm border mb-4" open>
+      <summary class="px-4 py-3 font-semibold cursor-pointer hover:bg-gray-50">📋 故事大纲</summary>
+      <div class="px-4 pb-4 text-sm text-gray-700 whitespace-pre-wrap">{{.outline.Content}}</div>
+    </details>
+    {{end}}
+
+    <!-- 章节列表 -->
+    <h2 class="font-semibold mb-3">章节列表</h2>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {{range .chapters}}
       <a href="/novel/{{$.novel.ID}}/chapter/{{.ChapterNo}}" class="bg-white rounded-lg shadow-sm border p-3 hover:shadow-md transition-shadow">
         <span class="text-xs text-gray-400">第{{.ChapterNo}}章</span>
@@ -42,32 +57,46 @@
 
     {{if not .chapters}}
     <div class="text-center py-16 text-gray-400">
-      <div class="animate-pulse">
-        <p class="text-lg mb-2">AI 正在创作中...</p>
-        <p id="progress-text" class="text-sm">正在生成故事大纲</p>
-      </div>
+      <p class="text-lg">等待生成中，查看上方调试面板...</p>
+      <p class="text-sm mt-2">自动刷新中，也可手动按 F5 刷新</p>
     </div>
     {{end}}
   </main>
 
   <script>
+    const log = document.getElementById('debug-log');
+    function appendLog(msg, color) {
+      const line = document.createElement('div');
+      line.style.color = color || '#4ade80';
+      line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    }
+
     document.addEventListener('htmx:sseMessage', function(e) {
-      var data = JSON.parse(e.detail.data);
-      var el = document.getElementById('progress-text');
-      if (!el) return;
-      if (data.type === 'chapter') {
-        el.innerHTML = '<span class="text-indigo-600">第' + data.chapter_no + '章已生成（' + data.status + '），正在绘制漫画...</span>';
-        setTimeout(function() { location.reload(); }, 2000);
-      } else if (data.type === 'comic') {
-        el.innerHTML = '<span class="text-green-600">第' + data.chapter_no + '章漫画完成！</span>';
-        setTimeout(function() { location.reload(); }, 2000);
-      } else if (data.type === 'error') {
-        el.innerHTML = '<span class="text-red-600">错误：' + data.msg + '</span>';
+      try {
+        var data = JSON.parse(e.detail.data);
+        if (data.type === 'progress') {
+          appendLog(data.step + ': ' + data.detail, '#60a5fa');
+          if (data.step === 'outline' && data.detail === '大纲生成完成') {
+            appendLog('大纲已就绪，刷新页面可查看', '#fbbf24');
+          }
+        } else if (data.type === 'chapter') {
+          appendLog('第' + data.chapter_no + '章: ' + data.status, '#4ade80');
+          setTimeout(function() { location.reload(); }, 2000);
+        } else if (data.type === 'comic') {
+          appendLog('第' + data.chapter_no + '章漫画完成', '#a78bfa');
+          setTimeout(function() { location.reload(); }, 2000);
+        } else if (data.type === 'error') {
+          appendLog('ERROR: ' + data.msg, '#f87171');
+        }
+      } catch(err) {
+        appendLog('RAW: ' + e.detail.data, '#94a3b8');
       }
-      console.log('SSE:', data);
     });
+
     document.addEventListener('htmx:sseError', function(e) {
-      console.error('SSE connection error', e);
+      appendLog('SSE连接失败', '#f87171');
     });
   </script>
 </body>

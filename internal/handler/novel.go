@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"github.com/gin-gonic/gin"
@@ -50,7 +51,7 @@ func (h *NovelHandler) Create(c *gin.Context) {
 	}
 	go func() {
 		if err := h.svc.StartGeneration(novel.ID); err != nil {
-			println("StartGeneration failed:", err.Error())
+			fmt.Println("StartGeneration failed:", err.Error())
 		}
 	}()
 	c.Redirect(http.StatusFound, "/novel/"+strconv.Itoa(int(novel.ID)))
@@ -73,9 +74,12 @@ func (h *NovelHandler) Detail(c *gin.Context) {
 	h.db.Where("novel_id = ?", novelID).Order("chapter_no").Find(&chapters)
 	var pages []model.ComicPage
 	h.db.Where("novel_id = ?", novelID).Order("chapter_id, page_no").Find(&pages)
+	var outline model.Outline
+	h.db.Where("novel_id = ?", novelID).Order("version DESC").First(&outline)
 	c.HTML(http.StatusOK, "novel_detail.html", gin.H{
 		"novel":    novel,
 		"chapters": chapters,
 		"pages":    pages,
+		"outline":  outline,
 	})
 }

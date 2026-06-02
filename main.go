@@ -98,6 +98,9 @@ func main() {
 	novelSvc.SetOutlineService(outlineSvc)
 	novelSvc.SetChapterService(chapterSvc)
 	novelSvc.SetComicService(comicSvc)
+	novelSvc.SetOnProgress(func(novelID uint, step, detail string) {
+		sseH.Push(novelID, fmt.Sprintf(`{"type":"progress","step":"%s","detail":"%s"}`, step, detail))
+	})
 
 	authH := handler.NewAuthHandler(authSvc)
 	novelH := handler.NewNovelHandler(novelSvc, db)
