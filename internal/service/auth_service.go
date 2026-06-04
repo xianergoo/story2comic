@@ -31,3 +31,17 @@ func (s *AuthService) Login(username, password string) (*model.User, error) {
 	}
 	return &user, nil
 }
+
+func (s *AuthService) Authenticate(username, password string) (*model.User, error) {
+	return s.Login(username, password)
+}
+
+func (s *AuthService) UserExists(username string) (bool, error) {
+	var count int64
+	err := s.db.Model(&model.User{}).Where("username = ?", username).Count(&count).Error
+	return count > 0, err
+}
+
+func (s *AuthService) CreateUser(username, password string) (*model.User, error) {
+	return s.Register(username, password)
+}

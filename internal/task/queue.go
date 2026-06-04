@@ -17,10 +17,11 @@ type Task struct {
 }
 
 type Queue struct {
-	writeChan chan Task
-	imageChan chan Task
-	writeFunc func(Task) error
-	imageFunc func(Task) error
+	writeChan  chan Task
+	imageChan  chan Task
+	writeFunc  func(Task) error
+	imageFunc  func(Task) error
+	onEnqueueImage func(Task) // 图片任务入队回调
 }
 
 func New(writeFn, imageFn func(Task) error) *Queue {
@@ -35,8 +36,23 @@ func New(writeFn, imageFn func(Task) error) *Queue {
 	return q
 }
 
-func (q *Queue) EnqueueWrite(t Task) { q.writeChan <- t }
-func (q *Queue) EnqueueImage(t Task) { q.imageChan <- t }
+// SetOnEnqueueImage 设置图片任务入队回调
+func (q *Queue) SetOnEnqueueImage(callback func(Task)) {
+	q.onEnqueueImage = callback
+}
+
+func (q *Queue) EnqueueWrite(t Task) { 
+	t.Type = TaskWrite
+	q.writeChan <- t 
+}
+
+func (q *Queue) EnqueueImage(t Task) { 
+	t.Type = TaskImage
+	q.imageChan <- t 
+	if q.onEnqueueImage != nil {
+		q.onEnqueueImage(t)
+	}
+}
 
 func (q *Queue) writeWorker() {
 	for t := range q.writeChan {
