@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+const DEFAULT_NOVEL_SSE_EVENT_NAMES = ['progress'];
+
 const api = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
@@ -28,8 +30,79 @@ export const authAPI = {
   me: () => api.get('/auth/me'),
 };
 
+export function parseNovelSSEMessage(rawEvent) {
+  const rawData = rawEvent?.data;
+
+  if (typeof rawData !== 'string' || rawData.trim() === '') {
+    throw new Error('Invalid SSE payload');
+  }
+
+  const parsed = JSON.parse(rawData);
+  if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') {
+    throw new Error('Invalid SSE payload shape');
+  }
+
+  const { type, payload, ...rest } = parsed;
+
+  let normalizedPayload = null;
+  if (Object.prototype.hasOwnProperty.call(parsed, 'payload')) {
+    normalizedPayload = payload;
+  } else if (Object.keys(rest).length > 0) {
+    normalizedPayload = rest;
+  }
+
+  return {
+    type,
+    payload: normalizedPayload,
+    raw: parsed,
+  };
+}
+
 export function createNovelSSE(novelId) {
   return new EventSource(`/api/v1/sse?novel_id=${novelId}`, { withCredentials: true });
+}
+
+function normalizeNovelSSEEventNames(eventNames) {
+  if (eventNames === undefined) {
+    return DEFAULT_NOVEL_SSE_EVENT_NAMES;
+  }
+
+  if (!Array.isArray(eventNames)) {
+    return [];
+  }
+
+  return [...new Set(eventNames.filter((eventName) => typeof eventName === 'string' && eventName))];
+}
+
+export function bindNovelSSEMessages(eventSource, listener, options = {}) {
+  const eventNames = normalizeNovelSSEEventNames(options.eventNames);
+
+  const wrappedListener = (event) => {
+    let message;
+
+    try {
+      message = parseNovelSSEMessage(event);
+    } catch (error) {
+      options.onParseError?.(error, event);
+      return;
+    }
+
+    listener(message, event);
+  };
+
+  eventSource.onmessage = wrappedListener;
+  eventNames.forEach((eventName) => {
+    eventSource.addEventListener(eventName, wrappedListener);
+  });
+
+  return () => {
+    if (eventSource.onmessage === wrappedListener) {
+      eventSource.onmessage = null;
+    }
+    eventNames.forEach((eventName) => {
+      eventSource.removeEventListener(eventName, wrappedListener);
+    });
+  };
 }
 
 export const novelAPI = {

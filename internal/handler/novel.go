@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -12,6 +13,68 @@ import (
 	"novelforge/internal/model"
 	"novelforge/internal/service"
 )
+
+type ChapterPlanSnapshot struct {
+	ChapterNo int    `json:"chapter_no"`
+	Title     string `json:"title"`
+	Summary   string `json:"summary"`
+}
+
+type NovelOutlineSnapshot struct {
+	ID              uint                              `json:"id"`
+	Version         int                               `json:"version"`
+	Content         string                            `json:"content"`
+	WorldSetting    string                            `json:"world_setting"`
+	CharacterSheets map[string]service.CharacterSheet `json:"character_sheets"`
+	ChapterPlan     []ChapterPlanSnapshot             `json:"chapter_plan"`
+	CreatedAt       string                            `json:"created_at"`
+}
+
+type NovelChapterComicSnapshot struct {
+	PageCount     int    `json:"page_count"`
+	DonePageCount int    `json:"done_page_count"`
+	Status        string `json:"status"`
+}
+
+type NovelChapterSnapshot struct {
+	ChapterNo    int                       `json:"chapter_no"`
+	Title        string                    `json:"title"`
+	Summary      string                    `json:"summary"`
+	State        string                    `json:"state"`
+	Status       string                    `json:"status"`
+	HasContent   bool                      `json:"has_content"`
+	RewriteCount int                       `json:"rewrite_count"`
+	UpdatedAt    string                    `json:"updated_at"`
+	Comic        NovelChapterComicSnapshot `json:"comic"`
+}
+
+type NovelProgressSnapshot struct {
+	PlannedCount     int `json:"planned_count"`
+	GeneratedCount   int `json:"generated_count"`
+	TextDoneCount    int `json:"text_done_count"`
+	RemainingCount   int `json:"remaining_count"`
+	CurrentChapterNo int `json:"current_chapter_no"`
+}
+
+type NovelFocusSnapshot struct {
+	ChapterNo int    `json:"chapter_no"`
+	Title     string `json:"title"`
+	State     string `json:"state"`
+	Status    string `json:"status"`
+}
+
+type NovelComicSummarySnapshot struct {
+	ChapterCount        int `json:"chapter_count"`
+	ChapterDoneCount    int `json:"chapter_done_count"`
+	PageCount           int `json:"page_count"`
+	DonePageCount       int `json:"done_page_count"`
+	PendingChapterCount int `json:"pending_chapter_count"`
+}
+
+type comicAggregate struct {
+	pageCount     int
+	donePageCount int
+}
 
 type NovelHandler struct {
 	svc *service.NovelService
@@ -91,16 +154,63 @@ func toNovelDTO(n *model.Novel) NovelDTO {
 	return NovelDTO{ID: n.ID, UserID: n.UserID, Title: n.Title, Summary: n.Summary, CoverURL: n.CoverURL, Mode: n.Mode, ImageMode: n.ImageMode, Status: n.Status, TextStatus: n.TextStatus, ImageStatus: n.ImageStatus, AIConfigID: n.AIConfigID, CreatedAt: n.CreatedAt.Format("2006-01-02 15:04:05"), UpdatedAt: n.UpdatedAt.Format("2006-01-02 15:04:05")}
 }
 
-func toChapterDTO(ch model.Chapter) ChapterDTO {
-	return ChapterDTO{ID: ch.ID, NovelID: ch.NovelID, ChapterNo: ch.ChapterNo, Title: ch.Title, Content: ch.Content, Status: ch.Status, RewriteCount: ch.RewriteCount, CreatedAt: ch.CreatedAt.Format("2006-01-02 15:04:05"), UpdatedAt: ch.UpdatedAt.Format("2006-01-02 15:04:05")}
+func parseChapterPlanSnapshots(raw string) []ChapterPlanSnapshot {
+	var plan []service.ChapterPlanItem
+	if err := json.Unmarshal([]byte(raw), &plan); err != nil {
+		return []ChapterPlanSnapshot{}
+	}
+	result := make([]ChapterPlanSnapshot, 0, len(plan))
+	for _, item := range plan {
+		result = append(result, ChapterPlanSnapshot{
+			ChapterNo: item.ChapterNo,
+			Title:     item.Title,
+			Summary:   item.Summary,
+		})
+	}
+	return result
 }
 
-func toOutlineDTO(o model.Outline) OutlineDTO {
-	return OutlineDTO{ID: o.ID, NovelID: o.NovelID, Version: o.Version, Content: o.Content, CharacterSheets: o.CharacterSheets, WorldSetting: o.WorldSetting, ChapterPlan: o.ChapterPlan, CreatedAt: o.CreatedAt.Format("2006-01-02 15:04:05")}
+func parseCharacterSheets(raw string) map[string]service.CharacterSheet {
+	if raw == "" {
+		return map[string]service.CharacterSheet{}
+	}
+	var sheets map[string]service.CharacterSheet
+	if err := json.Unmarshal([]byte(raw), &sheets); err != nil {
+		return map[string]service.CharacterSheet{}
+	}
+	if sheets == nil {
+		return map[string]service.CharacterSheet{}
+	}
+	return sheets
 }
 
-func toComicPageDTO(p model.ComicPage) ComicPageDTO {
-	return ComicPageDTO{ID: p.ID, ChapterID: p.ChapterID, NovelID: p.NovelID, PageNo: p.PageNo, PanelCount: p.PanelCount, ImageURLs: p.ImageURLs, Status: p.Status, CreatedAt: p.CreatedAt.Format("2006-01-02 15:04:05"), UpdatedAt: p.UpdatedAt.Format("2006-01-02 15:04:05")}
+func parseImageURLs(raw string) []string {
+	if raw == "" {
+		return []string{}
+	}
+	var urls []string
+	if err := json.Unmarshal([]byte(raw), &urls); err != nil {
+		return []string{}
+	}
+	if urls == nil {
+		return []string{}
+	}
+	return urls
+}
+
+func toOutlineSnapshot(o *model.Outline) *NovelOutlineSnapshot {
+	if o == nil {
+		return nil
+	}
+	return &NovelOutlineSnapshot{
+		ID:              o.ID,
+		Version:         o.Version,
+		Content:         o.Content,
+		WorldSetting:    o.WorldSetting,
+		CharacterSheets: parseCharacterSheets(o.CharacterSheets),
+		ChapterPlan:     parseChapterPlanSnapshots(o.ChapterPlan),
+		CreatedAt:       o.CreatedAt.Format("2006-01-02 15:04:05"),
+	}
 }
 
 func (h *NovelHandler) Home(c *gin.Context) {
@@ -224,16 +334,12 @@ func (h *NovelHandler) Resume(c *gin.Context) {
 }
 
 type NovelDetailResponse struct {
-	Novel    NovelDTO        `json:"novel"`
-	Chapters []ChapterDTO    `json:"chapters"`
-	Pages    []ComicPageDTO  `json:"pages"`
-	Outline  *OutlineDTO     `json:"outline"`
-	Progress struct {
-		Planned   int `json:"planned"`
-		TextDone  int `json:"text_done"`
-		ComicDone int `json:"comic_done"`
-		NextNo    int `json:"next_chapter_no"`
-	} `json:"progress"`
+	Novel    NovelDTO                  `json:"novel"`
+	Chapters []NovelChapterSnapshot    `json:"chapters"`
+	Outline  *NovelOutlineSnapshot     `json:"outline"`
+	Progress NovelProgressSnapshot     `json:"progress"`
+	Focus    *NovelFocusSnapshot       `json:"focus"`
+	Comic    NovelComicSummarySnapshot `json:"comic"`
 }
 
 func (h *NovelHandler) Detail(c *gin.Context) {
@@ -251,59 +357,180 @@ func (h *NovelHandler) Detail(c *gin.Context) {
 	h.db.Where("novel_id = ?", novelID).Order("chapter_id, page_no").Find(&pages)
 
 	var outline model.Outline
-	h.db.Where("novel_id = ?", novelID).Order("version DESC").First(&outline)
+	outlineErr := h.db.Where("novel_id = ?", novelID).Order("version DESC").First(&outline).Error
 
-	var textDone, planned, nextNo int
+	var outlineModel *model.Outline
+	if outlineErr == nil {
+		outlineModel = &outline
+	}
+
+	plan := parseChapterPlanSnapshots("")
+	if outlineModel != nil {
+		plan = parseChapterPlanSnapshots(outlineModel.ChapterPlan)
+	}
+
+	chaptersByNo := make(map[int]model.Chapter, len(chapters))
+	generatedCount := 0
+	textDoneCount := 0
 	for _, ch := range chapters {
+		chaptersByNo[ch.ChapterNo] = ch
+		generatedCount++
 		if ch.Status == "done" {
-			textDone++
+			textDoneCount++
 		}
 	}
 
-	var chapterPlan []service.ChapterPlanItem
-	json.Unmarshal([]byte(outline.ChapterPlan), &chapterPlan)
-	planned = len(chapterPlan)
+	comicByChapterNo := make(map[int]comicAggregate, len(chapters))
+	totalPageCount := 0
+	donePageCount := 0
+	chapterNoByID := make(map[uint]int, len(chapters))
+	for _, ch := range chapters {
+		chapterNoByID[ch.ID] = ch.ChapterNo
+	}
+	for _, p := range pages {
+		chapterNo, ok := chapterNoByID[p.ChapterID]
+		if !ok {
+			continue
+		}
+		agg := comicByChapterNo[chapterNo]
+		agg.pageCount++
+		totalPageCount++
+		if p.Status == "done" {
+			agg.donePageCount++
+			donePageCount++
+		}
+		comicByChapterNo[chapterNo] = agg
+	}
 
-	for _, cp := range chapterPlan {
-		found := false
-		for _, ch := range chapters {
-			if ch.ChapterNo == cp.ChapterNo && ch.Status == "done" {
-				found = true
-				break
+	chapterSnapshots := make([]NovelChapterSnapshot, 0, len(plan)+len(chapters))
+	planChapterNos := make(map[int]bool, len(plan))
+	var focus *NovelFocusSnapshot
+
+	for _, item := range plan {
+		planChapterNos[item.ChapterNo] = true
+		snapshot := NovelChapterSnapshot{
+			ChapterNo: item.ChapterNo,
+			Title:     item.Title,
+			Summary:   item.Summary,
+			State:     "planned",
+			Status:    "planned",
+			Comic: NovelChapterComicSnapshot{
+				Status: "planned",
+			},
+		}
+		if ch, ok := chaptersByNo[item.ChapterNo]; ok {
+			snapshot.State = "generated"
+			snapshot.Status = ch.Status
+			snapshot.HasContent = ch.Content != ""
+			snapshot.RewriteCount = ch.RewriteCount
+			snapshot.UpdatedAt = ch.UpdatedAt.Format("2006-01-02 15:04:05")
+		}
+		if comic, ok := comicByChapterNo[item.ChapterNo]; ok {
+			snapshot.Comic.PageCount = comic.pageCount
+			snapshot.Comic.DonePageCount = comic.donePageCount
+			snapshot.Comic.Status = "pending"
+			if comic.pageCount > 0 && comic.pageCount == comic.donePageCount {
+				snapshot.Comic.Status = "done"
 			}
 		}
-		if !found {
-			nextNo = cp.ChapterNo
-			break
-		}
+		chapterSnapshots = append(chapterSnapshots, snapshot)
 	}
 
-	var comicDone int
-	for _, p := range pages {
-		if p.Status == "done" {
-			comicDone++
-		}
-	}
-
-	chapterDTOs := make([]ChapterDTO, 0, len(chapters))
 	for _, ch := range chapters {
-		chapterDTOs = append(chapterDTOs, toChapterDTO(ch))
+		if planChapterNos[ch.ChapterNo] {
+			continue
+		}
+		snapshot := NovelChapterSnapshot{
+			ChapterNo:    ch.ChapterNo,
+			Title:        ch.Title,
+			State:        "generated",
+			Status:       ch.Status,
+			HasContent:   ch.Content != "",
+			RewriteCount: ch.RewriteCount,
+			UpdatedAt:    ch.UpdatedAt.Format("2006-01-02 15:04:05"),
+			Comic: NovelChapterComicSnapshot{
+				Status: "planned",
+			},
+		}
+		if comic, ok := comicByChapterNo[ch.ChapterNo]; ok {
+			snapshot.Comic.PageCount = comic.pageCount
+			snapshot.Comic.DonePageCount = comic.donePageCount
+			snapshot.Comic.Status = "pending"
+			if comic.pageCount > 0 && comic.pageCount == comic.donePageCount {
+				snapshot.Comic.Status = "done"
+			}
+		}
+		chapterSnapshots = append(chapterSnapshots, snapshot)
 	}
-	pageDTOs := make([]ComicPageDTO, 0, len(pages))
-	for _, p := range pages {
-		pageDTOs = append(pageDTOs, toComicPageDTO(p))
+
+	sort.Slice(chapterSnapshots, func(i, j int) bool {
+		return chapterSnapshots[i].ChapterNo < chapterSnapshots[j].ChapterNo
+	})
+
+	remainingCount := 0
+	currentChapterNo := 0
+	if len(chapterSnapshots) > 0 {
+		focus = nil
+		for _, snapshot := range chapterSnapshots {
+			if planChapterNos[snapshot.ChapterNo] && snapshot.Status != "done" {
+				remainingCount++
+				if currentChapterNo == 0 {
+					currentChapterNo = snapshot.ChapterNo
+				}
+			}
+			if snapshot.Status == "done" {
+				continue
+			}
+			if focus == nil {
+				focus = &NovelFocusSnapshot{
+					ChapterNo: snapshot.ChapterNo,
+					Title:     snapshot.Title,
+					State:     snapshot.State,
+					Status:    snapshot.Status,
+				}
+			}
+		}
+		if focus == nil {
+			last := chapterSnapshots[len(chapterSnapshots)-1]
+			focus = &NovelFocusSnapshot{
+				ChapterNo: last.ChapterNo,
+				Title:     last.Title,
+				State:     last.State,
+				Status:    last.Status,
+			}
+		}
 	}
-	outlineDTO := toOutlineDTO(outline)
+
+	comicChapterDoneCount := 0
+	comicPendingChapterCount := 0
+	for _, snapshot := range chapterSnapshots {
+		if snapshot.Comic.Status == "done" {
+			comicChapterDoneCount++
+			continue
+		}
+		comicPendingChapterCount++
+	}
+
 	resp := NovelDetailResponse{
 		Novel:    toNovelDTO(novel),
-		Chapters: chapterDTOs,
-		Pages:    pageDTOs,
-		Outline:  &outlineDTO,
+		Chapters: chapterSnapshots,
+		Outline:  toOutlineSnapshot(outlineModel),
+		Progress: NovelProgressSnapshot{
+			PlannedCount:     len(plan),
+			GeneratedCount:   generatedCount,
+			TextDoneCount:    textDoneCount,
+			RemainingCount:   remainingCount,
+			CurrentChapterNo: currentChapterNo,
+		},
+		Focus: focus,
+		Comic: NovelComicSummarySnapshot{
+			ChapterCount:        len(chapterSnapshots),
+			ChapterDoneCount:    comicChapterDoneCount,
+			PageCount:           totalPageCount,
+			DonePageCount:       donePageCount,
+			PendingChapterCount: comicPendingChapterCount,
+		},
 	}
-	resp.Progress.Planned = planned
-	resp.Progress.TextDone = textDone
-	resp.Progress.ComicDone = comicDone
-	resp.Progress.NextNo = nextNo
 
 	v1.Success(c, resp)
 }

@@ -2,9 +2,9 @@ package service
 
 import (
 	"fmt"
-	"strings"
 	"novelforge/internal/ai"
 	"novelforge/internal/model"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -30,7 +30,24 @@ func (s *ChapterService) GetByNovelAndNo(novelID uint, chapterNo int) (*model.Ch
 }
 
 func (s *ChapterService) Write(novelID uint, chapterNo int, chapterPlan []ChapterPlanItem, outline *model.Outline, suggestion string) (*model.Chapter, error) {
+	return s.WriteStream(novelID, chapterNo, chapterPlan, outline, suggestion, func(chunk string) {})
+}
+
+func (s *ChapterService) WriteStream(novelID uint, chapterNo int, chapterPlan []ChapterPlanItem, outline *model.Outline, suggestion string, onChunk func(chunk string)) (*model.Chapter, error) {
+	if chapterNo <= 0 {
+		return nil, fmt.Errorf("invalid chapter_no: %d", chapterNo)
+	}
+	if len(chapterPlan) == 0 {
+		return nil, fmt.Errorf("empty chapter plan")
+	}
+	if chapterNo > len(chapterPlan) {
+		return nil, fmt.Errorf("chapter_no %d out of range, plan has %d chapters", chapterNo, len(chapterPlan))
+	}
+
 	plan := chapterPlan[chapterNo-1]
+	if onChunk == nil {
+		onChunk = func(chunk string) {}
+	}
 
 	var prevChapters []model.Chapter
 	s.db.Where("novel_id = ? AND chapter_no < ? AND status = ?", novelID, chapterNo, "done").
@@ -56,7 +73,7 @@ func (s *ChapterService) Write(novelID uint, chapterNo int, chapterPlan []Chapte
 		userPrompt += "\n\n特别注意（用户建议）：" + suggestion
 	}
 
-	resp, err := s.provider.Chat(ai.ChatRequest{
+	ch, err := s.provider.ChatStream(ai.ChatRequest{
 		Messages: []ai.ChatMessage{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
@@ -66,11 +83,20 @@ func (s *ChapterService) Write(novelID uint, chapterNo int, chapterPlan []Chapte
 		return nil, err
 	}
 
+	var full strings.Builder
+	for chunk := range ch {
+		if chunk.Error != "" {
+			return nil, fmt.Errorf("stream error: %s", chunk.Error)
+		}
+		full.WriteString(chunk.Content)
+		onChunk(chunk.Content)
+	}
+
 	chapter := &model.Chapter{
 		NovelID:         novelID,
 		ChapterNo:       chapterNo,
 		Title:           plan.Title,
-		Content:         resp.Content,
+		Content:         full.String(),
 		ContextSnapshot: contextSnapshot,
 		RewriteCount:    0,
 	}
@@ -80,7 +106,7 @@ func (s *ChapterService) Write(novelID uint, chapterNo int, chapterPlan []Chapte
 		contextSnapshot,
 		outline.CharacterSheets,
 		outline.WorldSetting,
-		resp.Content,
+		chapter.Content,
 	)
 	if err == nil && !checkResult.Pass && checkResult.Score < 6 {
 		chapter.Status = "coherence_check"
@@ -89,6 +115,8 @@ func (s *ChapterService) Write(novelID uint, chapterNo int, chapterPlan []Chapte
 		chapter.Status = "done"
 	}
 
-	s.db.Create(chapter)
+	if err := s.db.Create(chapter).Error; err != nil {
+		return nil, err
+	}
 	return chapter, nil
 }

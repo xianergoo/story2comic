@@ -47,6 +47,53 @@ func (h *TaskHandlerImpl) SetTaskQueue(queue *task.Queue) {
 	h.taskQueue = queue
 }
 
+func (h *TaskHandlerImpl) publishEvent(novelID uint, eventType task.EventType, payload map[string]any) {
+	h.publisher.PushEvent(novelID, task.NewEvent(eventType, payload))
+}
+
+func (h *TaskHandlerImpl) publishChapterStatus(novelID uint, chapterNo int, status string) {
+	h.publishEvent(novelID, task.EventTypeChapterStatus, map[string]any{
+		"chapter_no": chapterNo,
+		"status":     status,
+	})
+}
+
+func (h *TaskHandlerImpl) publishChapterStream(novelID uint, chapterNo int, chunk string) {
+	h.publishEvent(novelID, task.EventTypeChapterStream, map[string]any{
+		"chapter_no": chapterNo,
+		"content":    chunk,
+	})
+}
+
+func (h *TaskHandlerImpl) publishComicStatus(novelID uint, chapterNo int, status string) {
+	h.publishEvent(novelID, task.EventTypeComicStatus, map[string]any{
+		"chapter_no": chapterNo,
+		"status":     status,
+	})
+}
+
+func (h *TaskHandlerImpl) publishLog(novelID uint, chapterNo int, step, message string) {
+	payload := map[string]any{
+		"step":    step,
+		"message": message,
+	}
+	if chapterNo > 0 {
+		payload["chapter_no"] = chapterNo
+	}
+	h.publishEvent(novelID, task.EventTypeLog, payload)
+}
+
+func (h *TaskHandlerImpl) publishError(novelID uint, chapterNo int, step, message string) {
+	payload := map[string]any{
+		"step":    step,
+		"message": message,
+	}
+	if chapterNo > 0 {
+		payload["chapter_no"] = chapterNo
+	}
+	h.publishEvent(novelID, task.EventTypeError, payload)
+}
+
 // HandleWrite 处理写作任务
 func (h *TaskHandlerImpl) HandleWrite(t task.Task) error {
 	// 检查作品状态：非 drafting 则跳过
@@ -75,19 +122,31 @@ func (h *TaskHandlerImpl) HandleWrite(t task.Task) error {
 	h.chapterSvc.SetProvider(p)
 
 	var plan []ChapterPlanItem
-	json.Unmarshal([]byte(outline.ChapterPlan), &plan)
-	chapter, err := h.chapterSvc.Write(t.NovelID, t.ChapterNo, plan, outline, t.Suggestion)
-	if err != nil {
-		fmt.Printf("ERROR write: novel=%d ch=%d err=%v\n", t.NovelID, t.ChapterNo, err)
-		h.publisher.Push(t.NovelID, fmt.Sprintf(`{"type":"error","chapter_no":%d,"msg":"写文失败: %s"}`,
-			t.ChapterNo, err.Error()))
+	if err := json.Unmarshal([]byte(outline.ChapterPlan), &plan); err != nil {
+		fmt.Printf("ERROR write: novel=%d ch=%d parse_plan=%v\n", t.NovelID, t.ChapterNo, err)
+		h.publishChapterStatus(t.NovelID, t.ChapterNo, "failed")
+		h.publishError(t.NovelID, t.ChapterNo, "parse_chapter_plan", "章节规划解析失败: "+err.Error())
 		return err
 	}
-	h.publisher.Push(t.NovelID, fmt.Sprintf(`{"type":"chapter","chapter_no":%d,"status":"%s"}`,
-		t.ChapterNo, chapter.Status))
+
+	h.publishChapterStatus(t.NovelID, t.ChapterNo, "writing")
+	h.publishLog(t.NovelID, t.ChapterNo, "chapter_writing_started", fmt.Sprintf("开始写作第 %d 章", t.ChapterNo))
+
+	chapter, err := h.chapterSvc.WriteStream(t.NovelID, t.ChapterNo, plan, outline, t.Suggestion, func(chunk string) {
+		h.publishChapterStream(t.NovelID, t.ChapterNo, chunk)
+	})
+	if err != nil {
+		fmt.Printf("ERROR write: novel=%d ch=%d err=%v\n", t.NovelID, t.ChapterNo, err)
+		h.publishChapterStatus(t.NovelID, t.ChapterNo, "failed")
+		h.publishError(t.NovelID, t.ChapterNo, "chapter_writing_failed", "写文失败: "+err.Error())
+		return err
+	}
+	h.publishChapterStatus(t.NovelID, t.ChapterNo, chapter.Status)
+	h.publishLog(t.NovelID, t.ChapterNo, "chapter_writing_completed", fmt.Sprintf("第 %d 章写作完成", t.ChapterNo))
 	fmt.Printf("CHAPTER: novel=%d ch=%d status=%s\n", t.NovelID, t.ChapterNo, chapter.Status)
 	h.db.Model(&model.Novel{}).Where("id = ?", t.NovelID).Update("updated_at", gorm.Expr("datetime('now')"))
 	if chapter.Status == "done" && h.taskQueue != nil {
+		h.publishLog(t.NovelID, t.ChapterNo, "comic_queued", fmt.Sprintf("第 %d 章漫画任务已入队", t.ChapterNo))
 		h.taskQueue.EnqueueImage(task.Task{NovelID: t.NovelID, ChapterNo: t.ChapterNo, Type: task.TaskImage})
 	}
 	return nil
@@ -112,14 +171,17 @@ func (h *TaskHandlerImpl) HandleImage(t task.Task) error {
 	p := CreateProviderFromConfig(&aiCfg)
 	h.comicSvc.SetProvider(p)
 
+	h.publishComicStatus(t.NovelID, t.ChapterNo, "generating")
+	h.publishLog(t.NovelID, t.ChapterNo, "comic_generation_started", fmt.Sprintf("开始生成第 %d 章漫画", t.ChapterNo))
 	err := h.comicSvc.Generate(chapter, novel, outline)
 	if err == nil {
-		h.publisher.Push(t.NovelID, fmt.Sprintf(`{"type":"comic","chapter_no":%d,"status":"done"}`, t.ChapterNo))
+		h.publishComicStatus(t.NovelID, t.ChapterNo, "done")
+		h.publishLog(t.NovelID, t.ChapterNo, "comic_generation_completed", fmt.Sprintf("第 %d 章漫画生成完成", t.ChapterNo))
 		fmt.Printf("COMIC: novel=%d ch=%d done\n", t.NovelID, t.ChapterNo)
 	} else {
 		fmt.Printf("ERROR comic: novel=%d ch=%d err=%v\n", t.NovelID, t.ChapterNo, err)
-		h.publisher.Push(t.NovelID, fmt.Sprintf(`{"type":"error","chapter_no":%d,"msg":"生图失败: %s"}`,
-			t.ChapterNo, err.Error()))
+		h.publishComicStatus(t.NovelID, t.ChapterNo, "failed")
+		h.publishError(t.NovelID, t.ChapterNo, "comic_generation_failed", "生图失败: "+err.Error())
 	}
 	return err
 }

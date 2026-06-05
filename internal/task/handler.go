@@ -6,10 +6,10 @@ import "novelforge/internal/model"
 type TaskHandler interface {
 	// HandleWrite 处理写作任务
 	HandleWrite(t Task) error
-	
+
 	// HandleImage 处理图片生成任务
 	HandleImage(t Task) error
-	
+
 	// OnEnqueueImage 图片任务入队回调
 	OnEnqueueImage(t Task)
 }
@@ -17,6 +17,7 @@ type TaskHandler interface {
 // SSEPublisher SSE发布者接口
 type SSEPublisher interface {
 	Push(novelID uint, message string)
+	PushEvent(novelID uint, event Event)
 }
 
 // ConfigProvider 配置提供者接口

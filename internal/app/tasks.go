@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"novelforge/internal/config"
 	"novelforge/internal/handler"
 	"novelforge/internal/service"
@@ -21,8 +20,8 @@ func setupTasks(app *App, sseH *handler.SSEHandler) *task.Queue {
 	app.Novel.SetOutlineService(app.Outline)
 	app.Novel.SetChapterService(app.Chapter)
 	app.Novel.SetComicService(app.Comic)
-	app.Novel.SetOnProgress(func(novelID uint, step, detail string) {
-		sseH.Push(novelID, fmt.Sprintf(`{"type":"progress","step":"%s","detail":"%s"}`, step, detail))
+	app.Novel.SetOnProgress(func(novelID uint, event task.Event) {
+		sseH.PushEvent(novelID, event)
 	})
 
 	return queue

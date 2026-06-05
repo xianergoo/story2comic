@@ -27,6 +27,12 @@ const routes = [
     meta: { auth: true },
   },
   {
+    path: '/novel/:id/chapter/:no',
+    name: 'ChapterView',
+    component: () => import('../views/ChapterView.vue'),
+    meta: { auth: true },
+  },
+  {
     path: '/ai-configs',
     name: 'AIConfigs',
     component: () => import('../views/AIConfigView.vue'),
