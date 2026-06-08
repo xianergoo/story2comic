@@ -11,6 +11,16 @@ import (
 
 type ProgressCallback func(novelID uint, event task.Event)
 
+type NovelServiceDeps struct {
+	DB          *gorm.DB
+	Outline     *OutlineService
+	Chapter     *ChapterService
+	Comic       *ComicService
+	TaskQueue   *task.Queue
+	OnProgress  ProgressCallback
+	MaxChapters int
+}
+
 type NovelService struct {
 	db          *gorm.DB
 	outlineSvc  *OutlineService
@@ -21,7 +31,17 @@ type NovelService struct {
 	maxChapters int
 }
 
-func NewNovelService(db *gorm.DB) *NovelService { return &NovelService{db: db} }
+func NewNovelService(deps NovelServiceDeps) *NovelService {
+	return &NovelService{
+		db:          deps.DB,
+		outlineSvc:  deps.Outline,
+		chapterSvc:  deps.Chapter,
+		comicSvc:    deps.Comic,
+		taskQ:       deps.TaskQueue,
+		onProgress:  deps.OnProgress,
+		maxChapters: deps.MaxChapters,
+	}
+}
 
 func (s *NovelService) SetMaxChapters(n int) { s.maxChapters = n }
 

@@ -1,6 +1,9 @@
 package task
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 type TaskType string
 
@@ -17,11 +20,12 @@ type Task struct {
 }
 
 type Queue struct {
-	writeChan  chan Task
-	imageChan  chan Task
-	writeFunc  func(Task) error
-	imageFunc  func(Task) error
+	writeChan      chan Task
+	imageChan      chan Task
+	writeFunc      func(Task) error
+	imageFunc      func(Task) error
 	onEnqueueImage func(Task) // 图片任务入队回调
+	closeOnce      sync.Once
 }
 
 func New(writeFn, imageFn func(Task) error) *Queue {
@@ -52,6 +56,13 @@ func (q *Queue) EnqueueImage(t Task) {
 	if q.onEnqueueImage != nil {
 		q.onEnqueueImage(t)
 	}
+}
+
+func (q *Queue) Close() {
+	q.closeOnce.Do(func() {
+		close(q.writeChan)
+		close(q.imageChan)
+	})
 }
 
 func (q *Queue) writeWorker() {
