@@ -24,7 +24,7 @@ func Load() *Config {
 		Port:          getEnv("PORT", "8080"),
 		DBPath:        getEnv("DB_PATH", "data/novelforge.db"),
 		ImageDir:      getEnv("IMAGE_DIR", "data/images"),
-		SessionSecret: getEnv("SESSION_SECRET", ""),
+		SessionSecret: getEnv("SESSION_SECRET", "dev-session-secret-change-me"),
 		MaxChapters:   getEnvInt("MAX_CHAPTERS", 5),
 		ImageEnabled:  getEnvBool("IMAGE_ENABLED", false),
 	}

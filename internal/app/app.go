@@ -40,12 +40,15 @@ func New() (*App, error) {
 		&model.Chapter{}, &model.ComicPage{}, &model.AgentTask{}, &model.Checkpoint{},
 	)
 
+	outlineSvc := service.NewOutlineService(db)
+	chapterSvc := service.NewChapterService(db, outlineSvc)
+
 	app := &App{
 		DB:     db,
 		Config: cfg,
 		Auth:    service.NewAuthService(db),
-		Outline: service.NewOutlineService(db),
-		Chapter: service.NewChapterService(db, service.NewOutlineService(db)),
+		Outline: outlineSvc,
+		Chapter: chapterSvc,
 		Comic:   service.NewComicService(db, cfg.ImageDir),
 		Novel:   service.NewNovelService(db),
 		Agent:   service.NewAgentService(db),

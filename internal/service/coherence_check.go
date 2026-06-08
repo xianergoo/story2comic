@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"novelforge/internal/ai"
 )
 
@@ -24,6 +25,10 @@ func (s *OutlineService) CheckCoherence(
 	worldSetting string,
 	chapterContent string,
 ) (*CheckResult, error) {
+	if s == nil || s.provider == nil {
+		return nil, fmt.Errorf("coherence provider is not configured")
+	}
+
 	systemPrompt := `你是一个专业的小说编辑，审查章节剧情连贯性。
 检查维度：
 1. 人物一致性：性格、关系、已知经历是否前后矛盾

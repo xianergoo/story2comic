@@ -53,11 +53,11 @@
 
           <div class="flex shrink-0 flex-wrap items-center gap-2">
             <a
-              v-if="canRead(chapter)"
+              v-if="canOpen(chapter)"
               class="inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
               :href="readHref(chapter.chapter_no)"
             >
-              阅读
+              {{ chapterActionLabel(chapter) }}
             </a>
             <button
               type="button"
@@ -102,6 +102,14 @@ defineEmits(['regenerate']);
 
 function canRead(chapter) {
   return chapter?.state === 'generated' || chapter?.has_content;
+}
+
+function canOpen(chapter) {
+  return Boolean(chapter?.chapter_no) && chapter?.state !== 'invalid';
+}
+
+function chapterActionLabel(chapter) {
+  return canRead(chapter) ? '阅读' : '查看';
 }
 
 function readHref(chapterNo) {

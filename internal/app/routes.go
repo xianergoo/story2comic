@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
 
 	"novelforge/api/v1"
@@ -43,7 +44,10 @@ func registerAuthRoutes(auth *gin.RouterGroup, app *App, db *gorm.DB) {
 		session := sessions.Default(c)
 		session.Set("user_id", user.ID)
 		session.Set("username", user.Username)
-		session.Save()
+		if err := saveSession(session); err != nil {
+			v1.InternalServerError(c, "保存登录状态失败")
+			return
+		}
 		v1.SuccessWithMessage(c, "登录成功", gin.H{"id": user.ID, "username": user.Username})
 	})
 
@@ -70,14 +74,20 @@ func registerAuthRoutes(auth *gin.RouterGroup, app *App, db *gorm.DB) {
 		session := sessions.Default(c)
 		session.Set("user_id", user.ID)
 		session.Set("username", user.Username)
-		session.Save()
+		if err := saveSession(session); err != nil {
+			v1.InternalServerError(c, "保存登录状态失败")
+			return
+		}
 		v1.SuccessWithMessage(c, "注册成功", gin.H{"id": user.ID, "username": user.Username})
 	})
 
 	auth.POST("/logout", func(c *gin.Context) {
 		session := sessions.Default(c)
 		session.Clear()
-		session.Save()
+		if err := saveSession(session); err != nil {
+			v1.InternalServerError(c, "清理登录状态失败")
+			return
+		}
 		v1.Success(c, nil)
 	})
 
@@ -95,6 +105,13 @@ func registerAuthRoutes(auth *gin.RouterGroup, app *App, db *gorm.DB) {
 		}
 		v1.Success(c, gin.H{"id": user.ID, "username": user.Username, "created_at": user.CreatedAt})
 	})
+}
+
+func saveSession(session sessions.Session) error {
+	if err := session.Save(); err != nil {
+		return fmt.Errorf("save session: %w", err)
+	}
+	return nil
 }
 
 func registerBusinessRoutes(r *gin.RouterGroup, app *App, db *gorm.DB, sseH *handler.SSEHandler) {
